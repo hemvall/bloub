@@ -120,8 +120,9 @@ states; the rest are either the measured circle or constructed in `skins.ts`.
 
 ## One shape is transcribed, not measured or constructed
 
-`kirby` in `skins.ts` comes from neither the video nor a formula: it is an avatar
-built in another project (`bible-strong-avatar-lab`, the avatar named "Kirby"),
+`zh` in `skins.ts` comes from neither the video nor a formula: it is an avatar
+built in another project — `bible-strong-avatar-lab`, entry
+`avatar-b6362e59-81a3-4334-a399-a721b23cf553` of `defaultStudioDocument.json` —
 transcribed. Its numbers are that document's own, divided by 120 — half the 240
 units its body is wide — to reach ball radii. They are long on purpose; rounding
 them drifts the likeness and simplifies nothing, since nobody reads them.

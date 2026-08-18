@@ -167,7 +167,7 @@ export default {
     hexagone: 'Hexagone',
     nuage: 'Nuage',
     goutte: 'Goutte',
-    kirby: 'Kirby'
+    zh: 'zh'
   },
 
   colors: {

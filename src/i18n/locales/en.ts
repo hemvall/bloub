@@ -142,7 +142,7 @@ const en: typeof fr = {
     hexagone: 'Hexagon',
     nuage: 'Cloud',
     goutte: 'Droplet',
-    kirby: 'Kirby'
+    zh: 'zh'
   },
 
   colors: {

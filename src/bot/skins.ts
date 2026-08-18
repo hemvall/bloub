@@ -35,7 +35,7 @@ export type ShapeId =
   | 'hexagone'
   | 'nuage'
   | 'goutte'
-  | 'kirby'
+  | 'zh'
 
 export interface BotShape {
   id: ShapeId
@@ -80,14 +80,15 @@ const droplet = normalize(
 const capsule = profileFromPolygon(hullOfCircles(-0.42, 0, 0.62, 0.42, 0, 0.62), 0, 0)
 
 /**
- * Kirby : une tete ronde et deux bras lateraux, legerement sous l'equateur et
+ * Zh : une tete ronde et deux bras lateraux, legerement sous l'equateur et
  * inclines en sens inverse l'un de l'autre.
  *
- * Reprise d'un avatar construit ailleurs (`bible-strong-avatar-lab`, avatar
- * « Kirby »), d'ou les nombres a rallonge : ce sont ses valeurs telles quelles,
- * simplement divisees par 120 — la moitie des 240 unites de large de son corps —
- * pour passer en rayons de boule. Les arrondir ferait deriver la ressemblance
- * sans rien simplifier, puisque personne ne les lit.
+ * Reprise d'un avatar construit ailleurs — `bible-strong-avatar-lab`, entree
+ * `avatar-b6362e59-81a3-4334-a399-a721b23cf553` de `defaultStudioDocument.json` —
+ * d'ou les nombres a rallonge : ce sont ses valeurs telles quelles, simplement
+ * divisees par 120 (la moitie des 240 unites de large de son corps) pour passer en
+ * rayons de boule. Les arrondir ferait deriver la ressemblance sans rien
+ * simplifier, puisque personne ne les lit.
  *
  * Des ELLIPSES et pas des disques : les bras sont plus larges (108,1) que hauts
  * (81,6), et un disque ne sait pas dire ca. C'est la seule forme du
@@ -95,7 +96,7 @@ const capsule = profileFromPolygon(hullOfCircles(-0.42, 0, 0.62, 0.42, 0, 0.62),
  */
 const UNITE_LABO = 120
 const bras = { a: 108.11015625 / 2 / UNITE_LABO, b: 81.6 / 2 / UNITE_LABO }
-const kirby = normalize(
+const zh = normalize(
   unionOfEllipsesProfile([
     { x: 0, y: 0, a: 1, b: 1 },
     { x: -103.30437876033604 / UNITE_LABO, y: 30.4449714479682 / UNITE_LABO, ...bras, rot: -14.843359375 },
@@ -127,7 +128,7 @@ export const SHAPES: BotShape[] = [
   { id: 'hexagone', radii: regularPolygonProfile(6, 1.04, 0.26, 0) },
   { id: 'nuage', radii: cloud },
   { id: 'goutte', radii: droplet },
-  { id: 'kirby', radii: kirby }
+  { id: 'zh', radii: zh }
 ]
 
 // Map indexee par `string` et non par `ShapeId` : les appelants interrogent avec

@@ -145,7 +145,7 @@ const zh: typeof fr = {
     hexagone: '六边形',
     nuage: '云朵',
     goutte: '水滴',
-    kirby: '卡比'
+    zh: 'zh'
   },
 
   colors: {

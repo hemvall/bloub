@@ -72,17 +72,39 @@ describe('completude des dictionnaires', () => {
     }
   })
 
+  /**
+   * Libelles qui sont des NOMS PROPRES, donc identiques dans les trois langues.
+   *
+   * La liste est explicite et pas une regle : c'est justement ce qui fait qu'une
+   * traduction oubliee reste une erreur. Y ajouter une entree est une decision, et
+   * elle doit se voir en revue — sans quoi le controle ci-dessous se viderait de
+   * son sens a la premiere entree penible a traduire.
+   */
+  const NOMS_PROPRES = new Set(['shapes.zh'])
+
   it('traduit vraiment les libelles des catalogues, sans les recopier du francais', () => {
     // Les noms de marque et les gabarits purs (« {state}, {duration} ») sont
     // identiques d'une langue a l'autre, c'est normal — on ne regarde donc que
-    // les catalogues, ou chaque entree est un vrai mot a traduire.
+    // les catalogues, ou chaque entree est un vrai mot a traduire. A une exception
+    // pres, `NOMS_PROPRES` : un personnage porte le meme nom partout.
     for (const famille of ['states', 'shapes', 'colors', 'expressions'] as const) {
       for (const [cle, valeur] of feuilles(fr[famille])) {
+        if (NOMS_PROPRES.has(`${famille}.${cle}`)) continue
         expect(feuilles(zh[famille]).find(([k]) => k === cle)![1], `zh ${famille}.${cle}`).not.toBe(
           valeur
         )
       }
     }
+  })
+
+  /** Un nom propre exempte doit exister : sinon la liste survit a l'entree qu'elle couvrait. */
+  it('n exempte que des libelles qui existent', () => {
+    const toutes = new Set(
+      (['states', 'shapes', 'colors', 'expressions'] as const).flatMap((famille) =>
+        feuilles(fr[famille]).map(([cle]) => `${famille}.${cle}`)
+      )
+    )
+    for (const nom of NOMS_PROPRES) expect(toutes, nom).toContain(nom)
   })
 
   it('couvre les quatre catalogues du bot, entree par entree', () => {
