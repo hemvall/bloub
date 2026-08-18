@@ -118,6 +118,29 @@ states; the rest are either the measured circle or constructed in `skins.ts`.
 
 `reference.mp4` and `frames/` are local inputs and are not in the repository.
 
+## One shape is transcribed, not measured or constructed
+
+`kirby` in `skins.ts` comes from neither the video nor a formula: it is an avatar
+built in another project (`bible-strong-avatar-lab`, the avatar named "Kirby"),
+transcribed. Its numbers are that document's own, divided by 120 — half the 240
+units its body is wide — to reach ball radii. They are long on purpose; rounding
+them drifts the likeness and simplifies nothing, since nobody reads them.
+
+A round head plus two arms: ellipses of 108.11 x 81.6, at (-103.30, +30.44)
+rotated -14.84 degrees and (+98.15, +32.55) rotated +15.18. Wider than they are
+tall, which is why this is the one customiser shape that needs
+`unionOfEllipsesProfile` — a disc cannot say that.
+
+**It is normalised to exactly 1.15, and the exact figure matters.** `DEMI_CADRE`,
+the export frame, is derived from the widest shape in the palette and is shared by
+all of them, so any shape that pushes `RAYON_MAX` past the squircle's existing 1.15
+silently shrinks every other shape's export. Normalising to the palette's usual
+~1.02 was the other trap: the peak here is an arm tip, a thin protrusion, so the
+head would have collapsed to 0.76 of a radius. At 1.15 the head holds 0.853 and the
+shape weighs 0.899 in equivalent radius — between the cloud (0.873) and the pebble
+(0.933). Sizing the head "correctly" (normalising to 1.311) would have widened the
+shared frame by 14%.
+
 ## The favicon is not an approximation
 
 `public/favicon.svg` is not a lookalike drawing: the circle and **both eye

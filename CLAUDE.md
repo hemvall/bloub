@@ -96,7 +96,20 @@ Details and the reasoning behind each are in [docs/](docs/):
   spring engine. A new bouncing effect belongs in the state that needs it.
 - **Two sources of shapes, not to be mixed.** `profiles.ts` is generated from the
   video and drives the animated states; `skins.ts` holds the customiser's shapes,
-  built analytically. A user's shape only replaces the body on `baseBody` states
+  built analytically. One of them, `kirby`, is instead **transcribed from another
+  project's document** (`bible-strong-avatar-lab`, avatar "Kirby") — hence its
+  long decimals: they are that document's values divided by 120, and rounding them
+  would drift the likeness without simplifying anything. It is also the only shape
+  needing `unionOfEllipsesProfile` rather than `unionOfCirclesProfile`, because its
+  arms are wider than they are tall.
+- **A new customiser shape must not push `RAYON_MAX` past 1.15.** The export frame
+  (`DEMI_CADRE`) is computed from the widest shape and is **shared by all of them**,
+  so a wider one silently shrinks everybody else's exports. `kirby` is normalised to
+  exactly 1.15 — the squircle's existing peak — for that reason and for the
+  squircle's original one: the peak is a thin protrusion (an arm tip), so
+  normalising onto it would shrink the head to 0.76. At 1.15 the head holds 0.853
+  and the shape weighs 0.899 in equivalent radius, the band where the cloud and the
+  pebble already live. A user's shape only replaces the body on `baseBody` states
   (`idle`, `wink`, `wide`, `notify`, `swirl`); elsewhere the silhouette IS the
   animation.
 - **Among catalogue states only `idle` carries `baseFace: true`** (`swirl` does too,

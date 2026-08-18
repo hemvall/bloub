@@ -233,6 +233,52 @@ export function unionOfCirclesProfile(circles: Array<{ x: number; y: number; r: 
 }
 
 /**
+ * Meme chose pour des ELLIPSES, qui peuvent en plus etre tournees. Un disque
+ * n'est que le cas `a === b`, donc cette fonction subsume la precedente ; les
+ * deux coexistent parce que la version disque est plus courte a lire la ou elle
+ * suffit, et que le nuage est deja regle dessus.
+ *
+ * Meme methode : on cherche la plus lointaine intersection du rayon avec l'une
+ * des ellipses, donc c'est exact tant que l'origine est dans l'union. On ramene
+ * le rayon dans le repere PROPRE de chaque ellipse — rotation inverse, puis
+ * division par les demi-axes — ou elle redevient un cercle unite, et l'equation
+ * du second degre se pose comme pour un disque.
+ *
+ * `rot` est en degres et tourne dans le sens des aiguilles d'une montre, comme
+ * partout ailleurs ici : le repere ecran a son y vers le bas.
+ */
+export function unionOfEllipsesProfile(
+  ellipses: Array<{ x: number; y: number; a: number; b: number; rot?: number }>
+): number[] {
+  const out = new Array<number>(PROFILE_SAMPLES).fill(0)
+  const locales = ellipses.map((e) => {
+    const p = (-(e.rot ?? 0) * Math.PI) / 180
+    return { ...e, cos: Math.cos(p), sin: Math.sin(p) }
+  })
+  for (let i = 0; i < PROFILE_SAMPLES; i++) {
+    const dx = COS[i] ?? 0
+    const dy = SIN[i] ?? 0
+    let best = 0
+    for (const e of locales) {
+      // direction du rayon et centre de l'ellipse, vus depuis son repere propre
+      const ex = (dx * e.cos - dy * e.sin) / e.a
+      const ey = (dx * e.sin + dy * e.cos) / e.b
+      const fx = (e.x * e.cos - e.y * e.sin) / e.a
+      const fy = (e.x * e.sin + e.y * e.cos) / e.b
+      const qa = ex * ex + ey * ey
+      if (qa === 0) continue
+      const qb = ex * fx + ey * fy
+      const disc = qb * qb - qa * (fx * fx + fy * fy - 1)
+      if (disc < 0) continue
+      const t = (qb + Math.sqrt(disc)) / qa
+      if (t > best) best = t
+    }
+    out[i] = best
+  }
+  return out
+}
+
+/**
  * Polygone a coins arrondis, par somme de Minkowski avec un disque : chaque
  * arete est poussee de `rc` vers l'exterieur, chaque sommet devient un arc de
  * rayon `rc`. Les sommets sont donc a poser au rayon voulu MOINS rc.

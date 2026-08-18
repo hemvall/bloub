@@ -5,7 +5,8 @@ import {
   profileFromPolygon,
   regularPolygonProfile,
   superellipseProfile,
-  unionOfCirclesProfile
+  unionOfCirclesProfile,
+  unionOfEllipsesProfile
 } from './shape'
 
 /**
@@ -34,6 +35,7 @@ export type ShapeId =
   | 'hexagone'
   | 'nuage'
   | 'goutte'
+  | 'kirby'
 
 export interface BotShape {
   id: ShapeId
@@ -77,6 +79,41 @@ const droplet = normalize(
 /** Capsule couchee : enveloppe de deux disques cote a cote. */
 const capsule = profileFromPolygon(hullOfCircles(-0.42, 0, 0.62, 0.42, 0, 0.62), 0, 0)
 
+/**
+ * Kirby : une tete ronde et deux bras lateraux, legerement sous l'equateur et
+ * inclines en sens inverse l'un de l'autre.
+ *
+ * Reprise d'un avatar construit ailleurs (`bible-strong-avatar-lab`, avatar
+ * « Kirby »), d'ou les nombres a rallonge : ce sont ses valeurs telles quelles,
+ * simplement divisees par 120 — la moitie des 240 unites de large de son corps —
+ * pour passer en rayons de boule. Les arrondir ferait deriver la ressemblance
+ * sans rien simplifier, puisque personne ne les lit.
+ *
+ * Des ELLIPSES et pas des disques : les bras sont plus larges (108,1) que hauts
+ * (81,6), et un disque ne sait pas dire ca. C'est la seule forme du
+ * personnalisateur qui en a besoin.
+ */
+const UNITE_LABO = 120
+const bras = { a: 108.11015625 / 2 / UNITE_LABO, b: 81.6 / 2 / UNITE_LABO }
+const kirby = normalize(
+  unionOfEllipsesProfile([
+    { x: 0, y: 0, a: 1, b: 1 },
+    { x: -103.30437876033604 / UNITE_LABO, y: 30.4449714479682 / UNITE_LABO, ...bras, rot: -14.843359375 },
+    { x: 98.15429266544173 / UNITE_LABO, y: 32.55003025735345 / UNITE_LABO, ...bras, rot: 15.175 }
+  ]),
+  // 1.15 pour la meme raison que le squircle, et le chiffre est le meme expres :
+  // le rayon maximal est ici le BOUT D'UN BRAS, une protuberance mince, donc
+  // normaliser dessus rapetisserait la tete jusqu'a 0,76 rayon. A 1,15 elle tient
+  // 0,853 et la forme pese 0,899 en rayon equivalent, soit la bande ou vivent
+  // deja le nuage et le galet.
+  //
+  // Et surtout 1,15 est DEJA le maximum de la palette : `RAYON_MAX` ne bouge donc
+  // pas, et le cadre d'export — qui est commun a toutes les formes — non plus.
+  // Viser la taille de tete « juste » (1,311) l'aurait elargi de 14 %, ce qui
+  // aurait rapetissé l'export de toutes les autres formes.
+  1.15
+)
+
 export const SHAPES: BotShape[] = [
   { id: 'cercle', radii: new Array(PROFILE_SAMPLES).fill(1) },
   { id: 'galet', radii: pebble },
@@ -89,7 +126,8 @@ export const SHAPES: BotShape[] = [
   // 0deg : sommets a gauche et a droite, donc aretes du haut et du bas plates
   { id: 'hexagone', radii: regularPolygonProfile(6, 1.04, 0.26, 0) },
   { id: 'nuage', radii: cloud },
-  { id: 'goutte', radii: droplet }
+  { id: 'goutte', radii: droplet },
+  { id: 'kirby', radii: kirby }
 ]
 
 // Map indexee par `string` et non par `ShapeId` : les appelants interrogent avec
