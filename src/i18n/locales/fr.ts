@@ -44,7 +44,8 @@ export default {
     animations: 'Animation',
     shape: 'Forme',
     expression: 'Expression',
-    color: 'Couleur'
+    color: 'Couleur',
+    customColor: 'Couleur libre'
   },
 
   /**
@@ -174,6 +175,7 @@ export default {
     brun: 'Brun',
     rouge: 'Rouge',
     orange: 'Orange',
+    mandarine: 'Mandarine',
     ambre: 'Ambre',
     vert: 'Vert',
     turquoise: 'Turquoise',

@@ -68,6 +68,21 @@ Details and the reasoning behind each are in [docs/](docs/):
   measured and rejected; don't re-try them. `skins.test.ts` locks the lot, and it sweeps
   **time as well as combinations** — one instant per combination is what let
   `capsule` + `effraye` through.
+- **The body's gradient is a measurement, and it is derived, not stored per colour.**
+  `src/bot/texture.ts` holds one radial ramp measured off a reference render (see
+  [docs/measurements.md](docs/measurements.md)) as **HSL offsets from the chosen
+  colour**, so the same measurement serves the twelve presets and any hex someone
+  types. The chosen colour lands on the **middle** stop exactly — that is what makes
+  `mandarine` reproduce the reference and a hand-typed hex stay the hex you typed —
+  and the ramp is **clipped** at black and white rather than recentred, because
+  recentring would save the relief by changing the colour actually displayed. It is
+  `userSpaceOnUse`, so it is fixed in the frame and reads as a light source; in object
+  units it would breathe, drift and jump with the silhouette. It is also **not** in
+  `BotFrame`: it depends only on the colour, never on `t`.
+- **`color` is either a palette id or a hex, in one field.** `resoudreCouleur` resolves
+  both and always returns a hex, which is what keeps the exported SVG self-contained.
+  Palette ids never start with `#`, so the two sets can't collide — that's why there is
+  no second "custom colour" setting to keep in sync with the first.
 - **States declare `ArcSpec`; only the engine rasterises.** Don't call `arcRender`
   from `states.ts`.
 - **A state change landing inside a fade blends from the FROZEN composite pose**

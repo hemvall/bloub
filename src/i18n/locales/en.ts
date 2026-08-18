@@ -27,7 +27,8 @@ const en: typeof fr = {
     animations: 'Animation',
     shape: 'Shape',
     expression: 'Expression',
-    color: 'Colour'
+    color: 'Colour',
+    customColor: 'Custom colour'
   },
 
   export: {
@@ -149,6 +150,7 @@ const en: typeof fr = {
     brun: 'Brown',
     rouge: 'Red',
     orange: 'Orange',
+    mandarine: 'Tangerine',
     ambre: 'Amber',
     vert: 'Green',
     turquoise: 'Turquoise',

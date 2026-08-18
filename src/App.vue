@@ -54,7 +54,7 @@ import {
   type Cycle
 } from '@/bot/cycles'
 import { DEFAULT_EXPRESSION, EXPRESSION_BY_ID } from '@/bot/expressions'
-import { COLOR_BY_ID, DEFAULT_COLOR, DEFAULT_SHAPE, SHAPE_BY_ID } from '@/bot/skins'
+import { DEFAULT_COLOR, DEFAULT_SHAPE, SHAPE_BY_ID, estCouleurValide } from '@/bot/skins'
 import { POSES, SEQUENCE, STATES, type StateId } from '@/bot/states'
 
 /**
@@ -439,7 +439,9 @@ const droite = computed(() => !nue.value && view.value !== 'reglages')
 /* ------------------------------------------------------------------- skins */
 
 const shape = ref(stored('forme', DEFAULT_SHAPE, (v) => SHAPE_BY_ID.has(v)))
-const color = ref(stored('couleur', DEFAULT_COLOR, (v) => COLOR_BY_ID.has(v)))
+// `estCouleurValide` et pas la seule appartenance a la palette : le reglage relu
+// peut aussi porter un hex libre, saisi au nuancier lors d'une visite precedente.
+const color = ref(stored('couleur', DEFAULT_COLOR, estCouleurValide))
 const expression = ref(
   stored('expression', DEFAULT_EXPRESSION, (v) => EXPRESSION_BY_ID.has(v))
 )

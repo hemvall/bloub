@@ -1,4 +1,5 @@
 import { PROFILE_SAMPLES } from './profiles'
+import { estHex, normaliseHex } from './texture'
 import {
   hullOfCircles,
   profileFromPolygon,
@@ -102,6 +103,7 @@ export type ColorId =
   | 'brun'
   | 'rouge'
   | 'orange'
+  | 'mandarine'
   | 'ambre'
   | 'vert'
   | 'turquoise'
@@ -121,6 +123,11 @@ export const COLORS: BotColor[] = [
   { id: 'brun', hex: '#8b5e3c' },
   { id: 'rouge', hex: '#e8483f' },
   { id: 'orange', hex: '#f08a24' },
+  // Mandarine est l'orange du RENDU DE REFERENCE, celui sur lequel le degrade du
+  // corps a ete releve (docs/measurements.md). C'est la seule couleur de la
+  // palette qui soit une mesure et non un choix : la poser rend ce rendu-la, ses
+  // trois arrets compris. Ne pas l'arrondir a #ff8c00, la teinte tomberait a cote.
+  { id: 'mandarine', hex: '#ff8b00' },
   { id: 'ambre', hex: '#f0b429' },
   { id: 'vert', hex: '#3ecf8e' },
   { id: 'turquoise', hex: '#2fbfa0' },
@@ -133,6 +140,31 @@ export const COLORS: BotColor[] = [
 
 export const COLOR_BY_ID = new Map<string, BotColor>(COLORS.map((c) => [c.id, c]))
 export const DEFAULT_COLOR = 'encre'
+
+/**
+ * Couleur du corps, depuis ce que porte la prop ou le stockage.
+ *
+ * Une couleur est SOIT un identifiant de la palette, SOIT un hex libre : le
+ * personnalisateur laisse saisir n'importe quelle teinte, et il fallait bien la
+ * transporter quelque part. Le meme champ sert aux deux plutot qu'un second
+ * reglage « couleur personnalisee » a tenir synchronise avec le premier — les
+ * identifiants de la palette ne commencent pas par `#`, les deux ensembles ne
+ * peuvent donc pas se croiser.
+ *
+ * Rend toujours un hex normalise : le SVG exporte doit etre auto-porteur, donc
+ * aucune couleur n'y transite sous forme d'identifiant.
+ */
+export function resoudreCouleur(valeur: string | undefined): string {
+  if (!valeur) return COLOR_BY_ID.get(DEFAULT_COLOR)!.hex
+  const connue = COLOR_BY_ID.get(valeur)
+  if (connue) return connue.hex
+  return normaliseHex(valeur) ?? COLOR_BY_ID.get(DEFAULT_COLOR)!.hex
+}
+
+/** Une valeur relue du stockage ou d'une URL est-elle utilisable telle quelle ? */
+export function estCouleurValide(valeur: string): boolean {
+  return COLOR_BY_ID.has(valeur) || estHex(valeur)
+}
 
 /** Melange deux couleurs hex. Sert a la brume de profondeur des particules. */
 export function mixHex(from: string, to: string, t: number): string {

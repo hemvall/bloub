@@ -10,12 +10,13 @@ import {
   EXPRESSION_BY_ID
 } from '@/bot/expressions'
 import {
-  COLOR_BY_ID,
   DEFAULT_COLOR,
   DEFAULT_SHAPE,
   SHAPE_BY_ID,
-  mixHex
+  mixHex,
+  resoudreCouleur
 } from '@/bot/skins'
+import { DEGRADE, degradeDuCorps } from '@/bot/texture'
 import { blockAt, defaultCycle, offsetOf, type Block } from '@/bot/cycles'
 import { DEMI_VIEWBOX, RAYON } from '@/bot/repere'
 import { STATE_BY_ID, type StateId } from '@/bot/states'
@@ -88,13 +89,31 @@ const R = RAYON
 const VB = DEMI_VIEWBOX
 
 const shapeRadii = computed(() => SHAPE_BY_ID.get(props.shape)?.radii ?? null)
-const ink = computed(() => COLOR_BY_ID.get(props.color)?.hex ?? '#0a0a0c')
+/**
+ * Couleur du corps. `resoudreCouleur` accepte aussi bien un identifiant de la
+ * palette qu'un hex libre saisi dans le personnalisateur — et rend toujours un
+ * hex, jamais un identifiant : c'est ce qui garde le SVG exporte auto-porteur.
+ */
+const ink = computed(() => resoudreCouleur(props.color))
+
 const expression = computed(() => EXPRESSION_BY_ID.get(props.expression) ?? null)
 
 const engine = new BotEngine(R, state.value, shapeRadii.value, expression.value)
 const frame = shallowRef<BotFrame>(engine.sample(props.frozenAt ?? 0))
 const uid = Math.random().toString(36).slice(2, 8)
 const maskId = `bot-mask-${uid}`
+const degradeId = `bot-skin-${uid}`
+
+/**
+ * Les trois arrets du degrade du corps. La regle vit dans `@/bot/texture`, qui
+ * ne depend ni du temps ni du DOM ; ici on ne fait que la poser dans un
+ * `<radialGradient>`.
+ *
+ * Un `computed` et pas un calcul par image : le degrade ne depend QUE de la
+ * couleur, donc le recalculer dans la boucle aurait produit trois fois la meme
+ * chaine soixante fois par seconde.
+ */
+const degrade = computed(() => degradeDuCorps(ink.value))
 
 let raf = 0
 let nextAt = Infinity
@@ -523,6 +542,29 @@ function dotAttrs(dot: BotFrame['dots'][number]) {
         />
       </mask>
 
+      <!--
+        Le volume du corps. `gradientUnits="userSpaceOnUse"` et non le defaut en
+        pourcentages : le degrade est FIXE DANS LE REPERE, donc il se lit comme
+        une source de lumiere. En unites d'objet il aurait suivi la boite du
+        corps — donc respire avec lui, glisse avec sa derive et saute a chaque
+        morphing de silhouette, ce qui aurait fait de la lumiere une texture
+        collee au bot.
+      -->
+      <radialGradient
+        :id="degradeId"
+        gradientUnits="userSpaceOnUse"
+        :cx="DEGRADE.cx * R"
+        :cy="DEGRADE.cy * R"
+        :r="DEGRADE.rayon * R"
+      >
+        <stop
+          v-for="arret in degrade"
+          :key="arret.offset"
+          :offset="arret.offset"
+          :stop-color="arret.couleur"
+        />
+      </radialGradient>
+
       <linearGradient
         v-for="arc in frame.arcs"
         :id="`${uid}-${arc.id}`"
@@ -581,7 +623,13 @@ function dotAttrs(dot: BotFrame['dots'][number]) {
       -->
       <path :d="frame.bodyPath" :fill="props.paper" />
       <g :mask="`url(#${maskId})`">
-        <rect :x="-VB" :y="-VB" :width="VB * 2" :height="VB * 2" :fill="ink" />
+        <rect
+          :x="-VB"
+          :y="-VB"
+          :width="VB * 2"
+          :height="VB * 2"
+          :fill="`url(#${degradeId})`"
+        />
       </g>
     </g>
 

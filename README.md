@@ -92,6 +92,12 @@ index is what identifies where you are; `state` follows it as an output. Pass
 `frozenAt` and the component renders one exact frame with no animation loop, which
 is how the thumbnails and the state board are drawn.
 
+`color` takes either a palette id (`ink`, `tangerine`, ...) or a plain hex —
+`#ff8b00` and `#f80` both work, so you are not limited to the twelve presets. The
+body is shaded with a radial gradient derived from whichever colour you pass; the
+colour you give is what lands at the middle stop, so it stays the colour you asked
+for.
+
 Props: `size`, `shape`, `color`, `expression`, `paper`, `frozenAt`, `cycle`,
 `follow`, `gaze`. Models: `block`, `state`, `playing`, `elapsed`. See
 [BloubBot.vue](src/components/BloubBot.vue) for the details.

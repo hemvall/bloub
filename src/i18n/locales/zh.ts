@@ -32,7 +32,8 @@ const zh: typeof fr = {
     animations: '动画',
     shape: '形状',
     expression: '表情',
-    color: '颜色'
+    color: '颜色',
+    customColor: '自定义颜色'
   },
 
   export: {
@@ -152,6 +153,7 @@ const zh: typeof fr = {
     brun: '棕色',
     rouge: '红色',
     orange: '橙色',
+    mandarine: '橘色',
     ambre: '琥珀色',
     vert: '绿色',
     turquoise: '青绿色',
