@@ -73,10 +73,11 @@ export default {
     gifDetail:
       "Le GIF ne gère la transparence qu'en tout ou rien : sans fond, le contour de la boule est un peu dur.",
     gifBackground: 'Fond',
-    fond_blanc: 'Fond blanc',
-    fond_blanc_aide: 'Contour lisse, à poser sur du clair',
+    fond_plein: 'Fond uni',
+    fond_plein_aide: 'Contour lisse, couleur cuite dans l’image',
     fond_transparent: 'Fond transparent',
     fond_transparent_aide: "S'adapte à tout fond, contour un peu dur",
+    fondCouleur: 'Couleur du fond',
     gifConfirm: 'Télécharger',
     copie: "Copier l'image",
     copieSvg: 'Copier le SVG',

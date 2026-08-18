@@ -128,17 +128,42 @@ Discord and Slack accept a GIF as an animated avatar and an SVG nowhere, which i
 reason to exist. Everywhere else the animated SVG is better on every axis.
 
 **It is the only export that asks a question**, and only because GIF alpha is one bit: the
-ball's antialiased rim has to be thresholded at 50 %, which comes out as a staircase. A solid
-background smooths that rim back out because it has something to blend into, at the cost of
-baking the colour in. Neither choice wins everywhere, so a dialog offers both, white first
-(`GifDialog.vue`, native radios so the browser gives grouping and arrow keys). Exporting at
-320 px while an avatar displays at 40-128 px softens the transparent edge further, since the
-browser's downscale re-smooths it.
+ball's antialiased rim has to be thresholded at 50 %, which comes out as a staircase. Measured
+on the rim of a rendered ball, the antialiasing ramp climbs 17 → 39 → 238 across two pixels;
+the threshold replaces that ramp with a cliff. **This is not a bug with a fix.** Nothing in the
+encoder can smooth it, because the file format has no value between "opaque" and "gone" — the
+one thing that helps at all is downscaling, and exporting at 320 px while an avatar displays at
+40-128 px is exactly that. A solid background smooths the rim properly, because it gives the
+edge something to blend into, at the cost of baking the colour in. Neither choice wins
+everywhere, so a dialog offers both.
+
+**"Solid" does not mean "white", and that distinction is the whole point.** A baked-in white
+is only clean on a light surface; on Discord's or Slack's dark chrome — the very places a GIF
+avatar exists for — it draws a white card around the ball, which is worse than the staircase
+it was fixing. So the mode carries a colour, white being merely its default.
+
+**The background is ONE field holding either `transparent` or a hex**, the same rule as `color`
+in `skins.ts` and for the same reason: a second "background colour" setting would be one more
+thing to keep in sync, and `transparent` cannot collide with a hex since it doesn't start with
+`#`. `couleurDeFond` resolves the field and always returns a hex or `null`, so nothing
+downstream ever sees a mode. The selector itself is `FondPicker.vue` — both dialogs ask the
+same question, so they share one answer — with native radios for the mode (the browser gives
+grouping and arrow keys) and the customiser's own colour swatch + hex field for the tint.
+
+Two traps live in that single field, and `FondPicker.test.ts` locks both. Switching to
+transparent **erases** the colour, so the component remembers the last hex; without it,
+switching back would silently return to white and lose a tint just dialled in. And a format
+with no alpha must not merely *hide* transparent, it must stop *carrying* it: the montage
+shares one background between its two formats, so "transparent" picked for the GIF used to
+reach the video encoder, which cannot paint it.
 
 **With a background, the eyes must take its exact colour.** They are holes filled with
 `paper`, so left at the site's off-white they show up as a slightly darker ring inside a white
 frame. `sequenceDuBot` therefore passes the matte through as `paper`, measured: eyes at
-`255,255,255` on a white background against `249,249,249` on a transparent one.
+`255,255,255` on a white background against `249,249,249` on a transparent one. This carries
+over to any chosen colour for free, and it is the right behaviour rather than a side effect:
+the eyes are holes, so they show the background, whatever it is. On a dark background they go
+dark — which is what a hole does, and what the ball itself does there too.
 
 `gifAnime` **deduces** transparency from the pixels rather than being told: flattened frames
 must not declare a transparent index, and above all must not be disposed to background between
@@ -209,8 +234,10 @@ antialiasing and dump every ring colour into one slot. Unseen colours resolve to
 kept entry, cached so each distinct colour costs one search.
 
 **Video is always opaque**: `VideoEncoder` refuses `alpha: 'keep'` for H.264 and VP9 alike,
-so the dialog offers a background choice for the GIF only, and doesn't show the group at all
-for MP4 rather than showing it disabled.
+so the dialog offers the transparent *mode* for the GIF only, and doesn't show the radios at
+all for MP4 rather than showing them disabled. The background **colour** is offered in both
+cases: an opaque video still has a background, it was merely white by decree. What MP4 lacks
+is the transparent option, not the choice.
 
 **Resolution and frame rate are per format, and mixing them up was a real bug.** The MP4 first
 inherited the GIF's 320 px / 20 fps, settings justified for the GIF by file weight, which a

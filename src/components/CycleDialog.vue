@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, useTemplateRef } from 'vue'
+import FondPicker from '@/components/FondPicker.vue'
 import { t } from '@/i18n'
 import {
-  FONDS_GIF,
   FORMATS_CYCLE,
   cycleAccepteTransparence,
   videoPossible,
@@ -14,9 +14,12 @@ import { useModalDialog } from '@/ui/useModalDialog'
 /**
  * Choix du format avant d'exporter le montage.
  *
- * Le groupe « fond » n'apparait QUE pour le GIF, au lieu d'etre affiche grise :
- * la video n'a pas de canal alpha du tout, donc il n'y a pas de choix a refuser,
- * il n'y a pas de choix.
+ * Le fond se choisit dans les deux cas, mais pas la meme chose : le GIF a le
+ * mode ET la couleur, la video seulement la couleur. Elle n'a pas de canal alpha
+ * du tout (`VideoEncoder` refuse `alpha: 'keep'`), donc « transparent » n'est pas
+ * un choix qu'on lui refuse, c'est un choix qui n'existe pas — et un choix qui
+ * n'existe pas ne s'affiche pas grise, il ne s'affiche pas. Elle a bien un fond,
+ * lui, il etait simplement blanc d'office.
  */
 const props = defineProps<{
   avancement: number | null
@@ -108,28 +111,15 @@ function ferme() {
         </label>
       </fieldset>
 
-      <!-- seul le GIF a un alpha a offrir : cf. la doc du composant -->
-      <fieldset
-        v-if="cycleAccepteTransparence(format)"
-        class="flex flex-col gap-1"
+      <!-- le GIF a le mode ET la couleur, la video seulement la couleur : cf. la
+           doc du composant -->
+      <FondPicker
+        v-model="fond"
+        name="fondCycle"
+        :transparence="cycleAccepteTransparence(format)"
+        :aide="false"
         :disabled="occupe"
-      >
-        <legend class="sr-only">{{ t('export.gifBackground') }}</legend>
-        <label
-          v-for="choix in FONDS_GIF"
-          :key="choix"
-          class="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm transition hover:bg-black/5"
-        >
-          <input
-            v-model="fond"
-            type="radio"
-            name="fondCycle"
-            :value="choix"
-            class="accent-[var(--ink)]"
-          />
-          {{ t(`export.fond_${choix}`) }}
-        </label>
-      </fieldset>
+      />
 
       <!-- la progression remplace les boutons : rien d'autre a faire qu'attendre -->
       <!-- l'echec s'affiche ICI et pas dans la barre d'export : celle-la n'est rendue

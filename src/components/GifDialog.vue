@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { useTemplateRef } from 'vue'
+import FondPicker from '@/components/FondPicker.vue'
 import { t } from '@/i18n'
-import { FONDS_GIF, type FondGif } from '@/ui/export'
+import { type FondGif } from '@/ui/export'
 import { useModalDialog } from '@/ui/useModalDialog'
 
 /**
@@ -10,10 +11,12 @@ import { useModalDialog } from '@/ui/useModalDialog'
  * Ce format est le seul a poser la question : sa transparence n'a qu'un bit, donc
  * son bord transparent est dur et se voit. Le fond plein le lisse, en echange
  * d'une couleur cuite dans l'image — aucun des deux ne gagne dans tous les cas,
- * d'ou le choix laisse a l'utilisateur.
+ * d'ou le choix laisse a l'utilisateur. Et la couleur cuite se choisit, sans quoi
+ * « lisser le bord » voudrait dire « poser une carte blanche » sur les avatars
+ * sombres de Discord ou de Slack, qui sont justement la raison d'etre du GIF.
  *
- * De vrais `<input type="radio">` et non des boutons : le navigateur donne le
- * groupe, la navigation aux fleches et l'annonce « 1 sur 2 » au lecteur d'ecran.
+ * Le selecteur lui-meme vit dans `FondPicker` : la boite du montage pose la meme
+ * question, et une question posee deux fois doit avoir une seule reponse.
  * Le comportement modal vient de `useModalDialog`, l'animation de `styles.css`.
  */
 const open = defineModel<boolean>('open', { required: true })
@@ -43,27 +46,7 @@ function confirm() {
         <p class="text-xs text-[var(--muted)]">{{ t('export.gifDetail') }}</p>
       </div>
 
-      <fieldset class="flex flex-col gap-1">
-        <legend class="sr-only">{{ t('export.gifBackground') }}</legend>
-        <label
-          v-for="(choix, i) in FONDS_GIF"
-          :key="choix"
-          class="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm transition hover:bg-black/5"
-        >
-          <input
-            v-model="fond"
-            type="radio"
-            name="fond"
-            :value="choix"
-            :autofocus="i === 0"
-            class="accent-[var(--ink)]"
-          />
-          <span class="flex flex-col">
-            {{ t(`export.fond_${choix}`) }}
-            <span class="text-xs text-[var(--muted)]">{{ t(`export.fond_${choix}_aide`) }}</span>
-          </span>
-        </label>
-      </fieldset>
+      <FondPicker v-model="fond" name="fond" />
 
       <div class="flex justify-end gap-2">
         <button

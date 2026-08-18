@@ -175,11 +175,13 @@ run it, the component's API. Don't duplicate it here.
 
 ## Tests
 
-`pnpm test` runs in `node` by default. **One file asks for a DOM** and says so on its first
+`pnpm test` runs in `node` by default. **Two files ask for a DOM** and say so on their first
 line (`// @vitest-environment happy-dom`): `ui/capture.test.ts`, which mounts `BloubBot.vue`
 to check the off-screen player — the exported render must be the component's own, not a
-second drawing built beside it. That is also why `vitest.config.ts` carries the Vue plugin.
-Keep the DOM per-file: a global DOM environment would slow the whole suite for one test.
+second drawing built beside it — and `components/FondPicker.test.ts`, which mounts the
+background selector for the two traps of its single mode-or-colour field. That is also why
+`vitest.config.ts` carries the Vue plugin. Keep the DOM per-file: a global DOM environment
+would slow the whole suite for two tests.
 
 `capture.test.ts` is the one that catches what nothing else can — the export defects are
 invisible short of stepping through an MP4 frame by frame.

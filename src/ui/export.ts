@@ -6,6 +6,7 @@
 
 import { DEMI_VIEWBOX, RAYON } from '@/bot/repere'
 import { SHAPES } from '@/bot/skins'
+import { normaliseHex } from '@/bot/texture'
 
 /**
  * Marge autour de la forme la plus large. Huit pour cent : c'est ce qui permet
@@ -155,31 +156,70 @@ export const cycleImages = (duree: number, format: FormatCycle) =>
 
 /**
  * La video est TOUJOURS opaque : `VideoEncoder` refuse `alpha: 'keep'`, en H.264
- * comme en VP9. Le GIF, lui, garde le choix du fond.
+ * comme en VP9. Seul le GIF peut donc se passer de fond.
+ *
+ * La COULEUR du fond, elle, se choisit dans les deux cas : une video opaque a
+ * bien un fond, il etait simplement blanc d'office. C'est le « transparent » qui
+ * lui manque, pas le choix.
  */
 export const cycleAccepteTransparence = (format: FormatCycle) => format === 'gif'
 
 /**
- * Fond du GIF, au choix de l'utilisateur.
+ * Fond des exports opaques, au choix de l'utilisateur.
  *
- * C'est le seul export ou la question se pose : les autres ont 8 bits d'alpha et
- * un bord parfaitement lisse sur un fond transparent. Le GIF n'en a qu'un, donc
- * son bord transparent est dur et se voit — le fond plein est le moyen de le
- * lisser, au prix d'une couleur cuite dans l'image.
+ * Le GIF est le seul a devoir POSER la question : les autres images ont 8 bits
+ * d'alpha et un bord parfaitement lisse sur un fond transparent. Le GIF n'en a
+ * qu'un, donc son bord transparent est tranche a 50 % et ressort en marches
+ * d'escalier — mesure sur le rendu : la rampe d'antialiasing passe de 17 a 238
+ * en deux pixels, et le seuil la remplace par une falaise. Ce n'est pas un defaut
+ * a corriger, c'est le format ; le fond plein est le seul moyen de relisser ce
+ * bord, parce qu'il lui donne de quoi se fondre.
  *
- * `blanc` par defaut : c'est celui qui a l'air propre partout, la ou le
- * transparent montre ses marches d'escalier sur un fond de couleur.
+ * Mais « plein » ne veut pas dire « blanc ». Un fond blanc cuit dans l'image
+ * n'est propre que pose sur du clair : sur un Discord ou un Slack sombre il
+ * ressort en carte de visite autour de la boule. La couleur est donc au choix,
+ * et le blanc n'est plus que son defaut.
+ *
+ * Un fond est SOIT `transparent`, SOIT un hex, dans UN SEUL champ — la regle de
+ * `color` dans `skins.ts`, pour la meme raison : un second reglage « couleur du
+ * fond » a tenir synchronise avec le premier serait un etat de plus a ne jamais
+ * desynchroniser. `transparent` ne commence pas par `#`, les deux ensembles ne
+ * peuvent donc pas se croiser.
  */
-export type FondGif = 'blanc' | 'transparent'
+export type FondGif = string
 
-export const FONDS_GIF: FondGif[] = ['blanc', 'transparent']
-export const FOND_GIF_DEFAUT: FondGif = 'blanc'
+export const FOND_TRANSPARENT = 'transparent'
 
 /** Blanc pur, et non le `--paper` du site : « fond blanc » doit etre blanc. */
 export const BLANC = '#ffffff'
 
-/** La couleur a peindre sous la boule, ou `null` pour ne rien peindre. */
-export const couleurDeFond = (fond: FondGif) => (fond === 'blanc' ? BLANC : null)
+export const FOND_GIF_DEFAUT: FondGif = BLANC
+
+/**
+ * Les deux MODES du selecteur, qui ne sont pas les deux valeurs : « plein »
+ * couvre toutes les couleurs. Le mode se deduit de la valeur au lieu d'etre un
+ * drapeau a part, exactement comme `libre` dans le personnalisateur.
+ */
+export type ModeFond = 'plein' | 'transparent'
+
+export const MODES_FOND: ModeFond[] = ['plein', 'transparent']
+
+export const estFondTransparent = (fond: FondGif) => fond === FOND_TRANSPARENT
+
+export const modeDuFond = (fond: FondGif): ModeFond =>
+  estFondTransparent(fond) ? 'transparent' : 'plein'
+
+/**
+ * La couleur a peindre sous la boule, ou `null` pour ne rien peindre.
+ *
+ * Rend toujours un hex normalise, comme `resoudreCouleur` : cette teinte part
+ * aussi dans le `paper` du bot — les yeux sont des trous, ils doivent laisser
+ * voir le fond exactement, sinon ils dessinent un anneau plus sombre dedans.
+ * Une valeur illisible retombe sur le blanc plutot que de peindre du n'importe
+ * quoi.
+ */
+export const couleurDeFond = (fond: FondGif): string | null =>
+  estFondTransparent(fond) ? null : (normaliseHex(fond) ?? BLANC)
 
 /**
  * UNE seule taille de PNG, volontairement : proposer 1024 et 2048 obligeait

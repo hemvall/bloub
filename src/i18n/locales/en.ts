@@ -50,10 +50,11 @@ const en: typeof fr = {
     gifDetail:
       'GIF transparency is all-or-nothing: with no background, the ball\u2019s edge comes out a little hard.',
     gifBackground: 'Background',
-    fond_blanc: 'White background',
-    fond_blanc_aide: 'Smooth edge, for light surfaces',
+    fond_plein: 'Solid background',
+    fond_plein_aide: 'Smooth edge, colour baked into the image',
     fond_transparent: 'Transparent background',
     fond_transparent_aide: 'Fits any background, edge a little hard',
+    fondCouleur: 'Background colour',
     gifConfirm: 'Download',
     copie: 'Copy image',
     copieSvg: 'Copy SVG',

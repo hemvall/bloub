@@ -11,9 +11,11 @@ import {
   FORMAT_CYCLE_DEFAUT,
   cycleAccepteTransparence,
   cycleImages,
-  FONDS_GIF,
   FOND_GIF_DEFAUT,
+  FOND_TRANSPARENT,
+  MODES_FOND,
   couleurDeFond,
+  modeDuFond,
   ACTION_BY_ID,
   ACTION_DEFAUT,
   DEMI_CADRE,
@@ -164,17 +166,32 @@ describe('fond du gif', () => {
     expect(anime.filter((a) => a.extension === 'gif')).toHaveLength(1)
   })
 
-  it('propose blanc et transparent, blanc par defaut', () => {
-    expect(FONDS_GIF).toEqual(['blanc', 'transparent'])
-    expect(FONDS_GIF).toContain(FOND_GIF_DEFAUT)
-    expect(FOND_GIF_DEFAUT).toBe('blanc')
+  it('propose deux modes, et le blanc par defaut', () => {
+    expect(MODES_FOND).toEqual(['plein', 'transparent'])
+    expect(FOND_GIF_DEFAUT).toBe(BLANC)
+    expect(BLANC).toBe('#ffffff')
   })
 
   /* « Fond blanc » doit etre BLANC, pas le `--paper` legerement casse du site. */
-  it('peint du blanc pur, et rien du tout en transparent', () => {
-    expect(couleurDeFond('blanc')).toBe(BLANC)
-    expect(BLANC).toBe('#ffffff')
-    expect(couleurDeFond('transparent')).toBeNull()
+  it('peint la couleur demandee, et rien du tout en transparent', () => {
+    expect(couleurDeFond(BLANC)).toBe(BLANC)
+    expect(couleurDeFond('#1A1D21')).toBe('#1a1d21')
+    expect(couleurDeFond(FOND_TRANSPARENT)).toBeNull()
+  })
+
+  /*
+   * Un seul champ pour le mode ET la couleur, comme `color` dans `skins.ts` :
+   * `transparent` ne commence pas par `#`, les deux ensembles ne se croisent pas.
+   */
+  it('deduit le mode de la valeur', () => {
+    expect(modeDuFond(FOND_TRANSPARENT)).toBe('transparent')
+    expect(modeDuFond(BLANC)).toBe('plein')
+    expect(modeDuFond('#000000')).toBe('plein')
+  })
+
+  /* Une valeur illisible ne doit pas peindre n'importe quoi sous la boule. */
+  it('retombe sur le blanc plutot que sur une couleur illisible', () => {
+    expect(couleurDeFond('pas une couleur')).toBe(BLANC)
   })
 })
 

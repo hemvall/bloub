@@ -603,9 +603,20 @@ async function exporteCycle() {
   avancementCycle.value = 0
   try {
     const mp4 = format === 'mp4'
-    // La video n'a pas d'alpha : elle impose le blanc. Le GIF, lui, garde le choix.
+    // La video n'a pas d'alpha : elle impose une couleur, mais pas laquelle. Le
+    // repli sur le blanc ne sert qu'a un fond transparent reste en memoire d'un
+    // export GIF precedent — `FondPicker` le corrige deja a l'affichage.
     const fichier = mp4
-      ? await cycleVersMp4(reglages, blocs, taille, images, pas, BLANC, suit, controle.signal)
+      ? await cycleVersMp4(
+          reglages,
+          blocs,
+          taille,
+          images,
+          pas,
+          couleurDeFond(fondCycle.value) ?? BLANC,
+          suit,
+          controle.signal
+        )
       : await cycleVersGif(
           reglages,
           blocs,
