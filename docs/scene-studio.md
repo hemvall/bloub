@@ -134,9 +134,12 @@ milliseconds on the main thread; it is debounced.
   later line, shot and cue slides by the difference. The envelope drives the mouth
   (`speechLevelAt`); without a clip the rig falls back to its rhythm. Without a provider the
   render is silent on the voice side, and says so.
-- **Music.** Three procedural, royalty-free beds (lo-fi beat, synth pulse, ambient pad) rendered
-  from a fixed seed, or an imported file (stored locally, looped if shorter). Music ducks under
-  voice windows (`ducking`).
+- **Music.** Real tracks without a key: a shelf of fifteen Kevin MacLeod tracks (CC BY 4.0) and a
+  search over the Internet Archive restricted to commercially usable licences
+  (`audio/library.ts`), both fetched by the browser since archive.org serves audio with open
+  CORS; the attribution line stays on the project and can be copied for the caption. Also three
+  procedural beds (lo-fi beat, synth pulse, ambient pad) and imported files. Everything is stored
+  locally under a hash and looped if shorter. Music ducks under voice windows (`ducking`).
 - **Room tone** per set: city hum for the office, HVAC for the meeting room, a drone and blips
   for the lab, rain and murmur for the bar, wind on the rooftop.
 - **SFX**: a whoosh on every cut, a riser into the last line and a hit on it, an optional tick per
@@ -144,10 +147,15 @@ milliseconds on the main thread; it is debounced.
 
 ### Language
 
-The content is French first: the demo, the templates and the generator write French; the
-parser reads French and English alike (shot names, stage directions, emotions, with or without
-accents, straight or typographic quotes) and the printer writes stage directions in the
-project's language (`voice.language`). The UI stays in English.
+Videos are **English first**, with a **French version behind** each project: the demo, the six
+templates and the nine example reels carry both scripts (`scripts.fr` on the English project);
+the generator writes the English script and a French one in the same call; "FR version" in the
+script panel creates a sibling project (`metadata.variantOf`) from the stored French script, or
+translated by Claude with the user's key, or copied to translate by hand. Voice clips are not
+carried over to a version: they would be in the wrong language. The parser reads French and
+English alike (shot names, stage directions, emotions, with or without accents, straight or
+typographic quotes) and the printer writes stage directions in the project's language
+(`voice.language`). The UI stays in English.
 
 ### Render
 
@@ -229,8 +237,8 @@ place. The Anthropic SDK (`~60 kB gzip`) and mediabunny are dynamic imports, loa
 
 - **Voice quality.** Clips come from a provider with the user's key; there is no local TTS, so
   without a key the reel stays silent on the voice side. Lip sync follows loudness, not phonemes.
-- **Music.** The procedural beds are placeholders with a pulse; a real soundtrack is an imported
-  file. Nothing is licensed or fetched.
+- **Music.** The Archive shelf is Kevin MacLeod only; the search depends on how well uploads are
+  tagged. Attribution is kept, not enforced: paste the credit in the caption yourself.
 - **Caption file.** Subtitles are burned in only; an `.srt` from `wordTimings` is a small step.
 - **Headless batch render.** `engine.capture` is already DOM-light; a server renderer needs a
   WebGL context and an OfflineAudioContext (headless Chrome has both).

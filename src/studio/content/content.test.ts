@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ContentStudio } from './api'
-import { chatbotVsAgent, CHATBOT_VS_AGENT_SCRIPT } from './demo'
+import { chatbotVsAgent, CHATBOT_VS_AGENT_SCRIPT, CHATBOT_VS_AGENT_SCRIPT_FR } from './demo'
 import { compileProject, projectDuration } from './compile'
 import { parseScript, printScript } from './script'
 import { parseProject, serializeProject, validateProject, createProject, castMember } from './project'
@@ -31,7 +31,12 @@ describe('script format', () => {
     const s = parseScript(CHATBOT_VS_AGENT_SCRIPT, cast)
     expect(s.warnings).toEqual([])
     expect(s.dialogue.map((d) => d.speaker)).toEqual(['ceo', 'lew', 'ceo', 'lew', 'ceo', 'lew', 'lew'])
-    expect(s.dialogue[0]).toMatchObject({ text: 'On a déjà ChatGPT.', start: 0, emotion: 'confused' })
+    expect(s.dialogue[0]).toMatchObject({ text: 'We already have ChatGPT.', start: 0, emotion: 'confused' })
+    const fr = parseScript(CHATBOT_VS_AGENT_SCRIPT_FR, cast)
+    expect(fr.warnings).toEqual([])
+    expect(fr.dialogue.map((d) => d.speaker)).toEqual(s.dialogue.map((d) => d.speaker))
+    expect(fr.shots.map((x) => x.type)).toEqual(s.shots.map((x) => x.type))
+    expect(fr.cues.map((c) => c.command)).toEqual(s.cues.map((c) => c.command))
     expect(s.shots.map((x) => `${x.type}:${x.target}:${x.movement}`)).toEqual([
       'two-shot:lew:static',
       'medium:lew:static',
@@ -65,8 +70,8 @@ describe('script format', () => {
     expect(s.warnings.some((w) => w.includes('UNKNOWN'))).toBe(true)
   })
   it('prints what it parsed and parses what it printed', () => {
-    const first = parseScript(CHATBOT_VS_AGENT_SCRIPT, cast)
-    const text = printScript({ cast, ...first })
+    const first = parseScript(CHATBOT_VS_AGENT_SCRIPT_FR, cast)
+    const text = printScript({ cast, ...first }, 'fr')
     const second = parseScript(text, cast)
     expect(second.warnings).toEqual([])
     expect(second.dialogue).toEqual(first.dialogue)
@@ -75,7 +80,7 @@ describe('script format', () => {
     expect(text).toContain('LEW (impassible): "Il sait')
     expect(text).toContain('CEO détourne le regard.')
     expect(text).toContain('CAMERA: close-up Lew slow-push')
-    const english = printScript({ cast, ...first }, 'en')
+    const english = printScript({ cast, ...first })
     expect(english).toContain('LEW (deadpan): "Il sait')
     expect(english).toContain('CEO looks away.')
     expect(parseScript(english, cast).cues).toEqual(first.cues)
@@ -181,8 +186,8 @@ describe('studio api', () => {
     const result = studio.compileTimeline()
     expect(result.warnings).toEqual([])
     expect(studio.project.scene.props.some((p) => p.kind === 'phone' && p.screen === 'notification')).toBe(true)
-    expect(studio.script()).toContain('DEV (fatigué): "It renamed one variable."')
-    expect(studio.script()).toContain('Lew a un sourire en coin.')
+    expect(studio.script()).toContain('DEV (tired): "It renamed one variable."')
+    expect(studio.script()).toContain('Lew smirks.')
     const again = ContentStudio.fromJSON(studio.toJSON())
     expect(again.project).toEqual(studio.project)
   })
@@ -193,10 +198,16 @@ describe('studio api', () => {
     expect(studio.project.shots.every((s) => s.target === 'lew' && s.other !== 'ceo')).toBe(true)
     expect(studio.compileTimeline().warnings).toEqual([])
   })
-  it('instantiates every template into a valid, deterministic reel', () => {
+  it('instantiates every template into a valid, deterministic reel, in both languages', () => {
     for (const t of TEMPLATES) {
       const studio = ContentStudio.fromTemplate(t.id, { now: '2026-01-01T00:00:00.000Z' })
-      const warnings = studio.setScript(t.script)
+      expect(studio.project.voice.language).toBe('en')
+      expect(studio.project.scripts?.fr, t.id).toBe(t.script.fr)
+      expect(studio.setScript(t.script.en), t.id).toEqual([])
+      const french = ContentStudio.fromTemplate(t.id, { now: '2026-01-01T00:00:00.000Z', language: 'fr' })
+      expect(french.setScript(t.script.fr), t.id).toEqual([])
+      expect(french.compileTimeline().warnings, t.id).toEqual([])
+      const warnings = studio.setScript(t.script.en)
       expect(warnings, t.id).toEqual([])
       const result = studio.compileTimeline()
       expect(result.warnings, t.id).toEqual([])
@@ -206,13 +217,18 @@ describe('studio api', () => {
       expect(result.scene.timeline.filter((e) => e.type === 'camera' && e.cut).length, t.id).toBeGreaterThan(1)
     }
   })
-  it('ships every example reel parsed clean, compiled clean, 12 to 35 seconds, in French', () => {
+  it('ships every example reel parsed clean, compiled clean, 12 to 35 seconds, English with French behind', () => {
     const ids = new Set<string>()
     for (const reel of EXAMPLE_REELS) {
       const studio = new ContentStudio(buildExample(reel))
       expect(ids.has(reel.id), reel.id).toBe(false)
       ids.add(reel.id)
-      expect(studio.setScript(reel.script), reel.id).toEqual([])
+      expect(studio.project.scripts?.fr, reel.id).toBe(reel.script.fr)
+      const french = new ContentStudio(buildExample(reel, undefined, 'fr'))
+      expect(french.setScript(reel.script.fr), reel.id).toEqual([])
+      expect(french.compileTimeline().warnings, reel.id).toEqual([])
+      expect(french.project.dialogue.length, reel.id).toBe(studio.project.dialogue.length)
+      expect(studio.setScript(reel.script.en), reel.id).toEqual([])
       const result = studio.compileTimeline()
       expect(result.warnings, reel.id).toEqual([])
       expect(result.scene.duration, reel.id).toBeGreaterThan(12)
@@ -220,7 +236,7 @@ describe('studio api', () => {
       expect(studio.project.dialogue.length, reel.id).toBeGreaterThanOrEqual(5)
       expect(result.scene.timeline.filter((e) => e.type === 'camera' && e.cut).length, reel.id).toBeGreaterThanOrEqual(3)
       expect(studio.project.cast.some((c) => c.kind === 'lew'), reel.id).toBe(true)
-      expect(studio.project.voice.language).toBe('fr')
+      expect(studio.project.voice.language).toBe('en')
       expect(() => validateProject(studio.project), reel.id).not.toThrow()
     }
     expect(exampleProjects('2026-01-01T00:00:00.000Z').map((p) => p.id)).toEqual(['demo-chatbot-vs-agent', ...EXAMPLE_REELS.map((r) => `example-${r.id}`)])
@@ -303,8 +319,29 @@ describe('shots, subtitles, personalities', () => {
     const p = createProject({ format: 'landscape', now: 'x' })
     expect(p.scene.aspect).toBe('16:9')
     expect(p.status).toBe('draft')
-    expect(p.voice.language).toBe('fr')
+    expect(p.voice.language).toBe('en')
     expect(p.audio.music.track).toBe('lofi')
+  })
+  it('makes a language version from the stored script, without the voices', () => {
+    const studio = new ContentStudio(chatbotVsAgent())
+    studio.setVoice({ provider: 'openai' })
+    studio.attachVoice(studio.project.dialogue[0]!.id, { hash: 'h', duration: 2, envelope: [1] })
+    const fr = studio.variant('fr', '2026-02-02T00:00:00.000Z')
+    expect(fr.id).not.toBe(studio.project.id)
+    expect(fr.voice.language).toBe('fr')
+    expect(fr.metadata.variantOf).toBe(studio.project.id)
+    expect(fr.dialogue[0]!.text).toBe('On a déjà ChatGPT.')
+    expect(fr.dialogue.every((d) => !d.audio)).toBe(true)
+    expect(fr.scripts?.en).toContain('We already have ChatGPT.')
+    expect(fr.scripts?.fr).toBeUndefined()
+    expect(fr.cast).toEqual(studio.project.cast)
+    expect(() => validateProject(fr)).not.toThrow()
+    const back = new ContentStudio(fr).variant('en')
+    expect(back.dialogue[0]!.text).toBe('We already have ChatGPT.')
+    const plain = new ContentStudio(createProject({ cast: ['lew'], now: 'x' }))
+    plain.addDialogue({ speaker: 'lew', text: 'Hello.' })
+    const copy = plain.variant('fr', 'y')
+    expect(copy.dialogue[0]!.text).toBe('Hello.')
   })
 })
 describe('audio', () => {
@@ -334,9 +371,9 @@ describe('audio', () => {
     const studio = new ContentStudio(chatbotVsAgent())
     const line = studio.project.dialogue[2]!
     studio.attachVoice(line.id, clip(2))
-    studio.setScript(studio.script().replace('Pas un employé.', 'Pas un collègue.'))
+    studio.setScript(studio.script().replace('Not an employee.', 'Not a colleague.'))
     expect(studio.project.dialogue.find((d) => d.text === line.text)!.audio?.hash).toBe('h2')
-    expect(studio.project.dialogue.find((d) => d.text === 'Pas un collègue.')!.audio).toBeUndefined()
+    expect(studio.project.dialogue.find((d) => d.text === 'Not a colleague.')!.audio).toBeUndefined()
     expect(() => validateProject(studio.project)).not.toThrow()
   })
   it('plans the mix from the project: ducks under voices, whooshes on cuts, hits the punchline', () => {
@@ -452,9 +489,9 @@ describe('audio', () => {
   it('accepts projects saved before audio existed', () => {
     const old = JSON.parse(serializeProject(chatbotVsAgent())) as Record<string, unknown>
     delete old.audio
-    old.voice = { provider: 'none', language: 'en', voices: {} }
+    old.voice = { provider: 'none', language: 'fr', voices: {} }
     const project = validateProject(old)
     expect(project.audio).toEqual(DEFAULT_AUDIO)
-    expect(project.voice.language).toBe('en')
+    expect(project.voice.language).toBe('fr')
   })
 })

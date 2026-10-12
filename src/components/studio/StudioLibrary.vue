@@ -15,9 +15,9 @@ const brief = ref('')
 const menu = ref(false)
 const keyOpen = ref(false)
 const EXAMPLES = [
-  'Un Reel de 20 secondes : un CEO demande à Lew pourquoi il faudrait un agent alors qu’ils ont déjà ChatGPT. Bureau de nuit, plan à deux puis gros plans, drôle mais exact.',
-  'Explique pourquoi « mettre nos docs dans une base vectorielle » n’est pas du RAG. Lew seul dans le lab, 25 secondes, une chute.',
-  'Un dev demande à une IA de renommer une variable et elle refactore tout. Dev et Lew, 18 secondes.'
+  'A 20-second Reel: a CEO asks Lew why they need an agent when they already have ChatGPT. Office at night, two-shot then close-ups, funny but accurate.',
+  'Explain why "putting our docs in a vector database" is not RAG. Lew alone in the lab, 25 seconds, one punchline.',
+  'A developer asks an AI to rename one variable and it refactors everything. Dev and Lew, 18 seconds.'
 ]
 const visible = computed(() => {
   const list = filter.value === 'all' ? projects.value : projects.value.filter((p) => p.status === filter.value)
@@ -70,7 +70,7 @@ onBeforeUnmount(() => window.removeEventListener('pointerdown', outside))
     </header>
     <form class="command-bar" @submit.prevent="submit">
       <Icon name="wand" :size="18" />
-      <input v-model="brief" type="text" placeholder="Décris ta vidéo… ex. « Reel de 25 s : un CEO demande à Lew pourquoi un agent alors qu’ils ont déjà ChatGPT »" aria-label="Video brief" :disabled="generating" />
+      <input v-model="brief" type="text" placeholder="Describe your video… e.g. “25-second Reel: a CEO asks Lew why they need an agent when they already have ChatGPT”" aria-label="Video brief" :disabled="generating" />
       <button v-if="generating" type="button" class="ghost" @click="studio.cancelGenerate()"><Icon name="stop" /> Cancel</button>
       <button v-else type="submit" class="primary" :disabled="!brief.trim() || !canGenerate" :title="canGenerate ? 'Generate a project with Claude' : 'Needs an Anthropic API key'">
         <Icon name="sparkle" /> Generate
@@ -82,7 +82,7 @@ onBeforeUnmount(() => window.removeEventListener('pointerdown', outside))
         Anthropic API key
         <input v-model="claude.apiKey" type="password" placeholder="sk-ant-…" autocomplete="off" spellcheck="false" />
       </label>
-      <p class="note">The key stays in this browser and goes only to api.anthropic.com. Generation writes a project in the script format; the compiler builds the timeline from it, exactly as for a hand-written script. Without a key, start from a template.</p>
+      <p class="note">The key stays in this browser and goes only to api.anthropic.com. Generation writes the project in English with a French script behind it; the compiler builds the timeline from it, exactly as for a hand-written script. Without a key, start from a template.</p>
     </div>
     <p v-else-if="!canGenerate" class="note command-note">No API key: the brief cannot be generated. Templates below work offline; the key goes in the settings icon.</p>
     <div v-if="generating" class="generating"><span /><span /><span /> Writing the project…</div>
@@ -100,7 +100,7 @@ onBeforeUnmount(() => window.removeEventListener('pointerdown', outside))
         <button class="thumb" :style="{ background: ENVIRONMENTS[p.environment].background }" :title="`Open ${p.title}`" @click="studio.openProject(p.id)">
           <img v-if="p.metadata.thumbnail" :src="p.metadata.thumbnail" alt="" />
           <span v-else class="thumb-empty"><Icon name="film" :size="22" /></span>
-          <span class="thumb-format">{{ OUTPUT_PRESETS[p.format].aspect }}</span>
+          <span class="thumb-format">{{ OUTPUT_PRESETS[p.format].aspect }} · {{ p.voice.language.toUpperCase() }}</span>
         </button>
         <div class="card-body">
           <h3>{{ p.title }}</h3>

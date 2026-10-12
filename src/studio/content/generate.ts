@@ -5,9 +5,10 @@ import { SHOT_MOVEMENTS, SHOT_TYPES } from '../camera/shots'
 import { OUTPUT_FORMATS } from '../render/presets'
 import { EXPRESSIONS } from '../scene/model'
 import type { ClaudeSettings } from '../director/claude'
+import type { ContentLanguage } from '../audio/plan'
 import { ACTING_COMMANDS } from './acting'
 import { ContentStudio } from './api'
-import { CHATBOT_VS_AGENT_SCRIPT } from './demo'
+import { CHATBOT_VS_AGENT_SCRIPT, CHATBOT_VS_AGENT_SCRIPT_FR } from './demo'
 import type { ContentProject } from './project'
 import { TEMPLATES } from './templates'
 /**
@@ -37,10 +38,11 @@ export const PROJECT_SCHEMA = {
         additionalProperties: false
       }
     },
-    script: { type: 'string', description: 'The whole script in the script format.' },
+    script: { type: 'string', description: 'The whole script in the script format, in the primary language (English).' },
+    scriptFr: { type: 'string', description: 'The same script in French, same beats and CAMERA lines.' },
     reply: { type: 'string', description: 'One sentence to the user about the choices made.' }
   },
-  required: ['title', 'topic', 'hook', 'cta', 'format', 'environment', 'template', 'cast', 'script', 'reply'],
+  required: ['title', 'topic', 'hook', 'cta', 'format', 'environment', 'template', 'cast', 'script', 'scriptFr', 'reply'],
   additionalProperties: false
 } as const
 export function generationPrompt() {
@@ -49,7 +51,7 @@ export function generationPrompt() {
   const templates = TEMPLATES.map((t) => `- ${t.id}: ${t.premise} (${t.structure.join(' → ')})`).join('\n')
   return `You write short vertical videos for Lew, an AI engineering business that sells practical AI systems to companies: agents, internal assistants, workflow automation, RAG and company knowledge, integrations with business tools, orchestration, evaluation and productionisation. Lew is also the name of the recurring main character and of the agent workspace product. The videos grow an audience, explain AI concepts in an entertaining way, show real business use cases and promote Lew indirectly. Funny, but technically accurate; never an explicit ad.
 
-LANGUAGE: write every line of dialogue, the title, hook and CTA in FRENCH (France, tutoiement entre collègues, vouvoiement du client), unless the brief is explicitly written in another language. Short, oral, punchy French: as people speak, not as they write.
+LANGUAGE: the primary version is ENGLISH (title, hook, CTA, every line), unless the brief explicitly asks for another language. Short, oral, punchy: as people speak. Then ALSO write the same script in FRENCH in the scriptFr field (France, tutoiement entre collègues, vouvoiement du client), same beats, same CAMERA lines, same stage directions in French ("Lew regarde le CEO.", "Le CEO détourne le regard.", "Dev soupire.", "Le CEO a l'air perdu."), French emotion words (impassible, narquois, perdu, surpris, agacé, content, fatigué).
 
 You answer by calling ${PROJECT_TOOL_NAME} once with a complete project. Rules:
 - 15 to 30 seconds. Reading speed is about 2.6 words per second; a line of 8 words lasts ~3.7 s. Count. A voice will be generated for every line: write what a person can say in one breath.
@@ -62,23 +64,25 @@ You answer by calling ${PROJECT_TOOL_NAME} once with a complete project. Rules:
 Script format (exactly this; blank line between beats; times optional, lines flow one after the other):
 [00:00.0]
 CAMERA: two-shot Lew CEO
-CEO (perdu): "On a déjà ChatGPT."
+CEO (confused): "We already have ChatGPT."
 
-Lew regarde le CEO.
+Lew looks at CEO.
 CAMERA: medium Lew
-LEW (impassible): "Il sait ce qui se passe dans votre CRM ?"
+LEW (deadpan): "Does it know what's happening in your CRM?"
 
 CAMERA: close-up Lew slow-push
-LEW (narquois): "Alors vous avez un chatbot."
+LEW (smug): "Then you have a chatbot."
 
 PAUSE 0.5
 
-LEW: "Pas un employé."
+LEW: "Not an employee."
 
-Speaker labels are the cast NAMES in capitals. Emotions in parentheses, French words accepted: impassible, narquois, perdu, surpris, agacé, content, fatigué, triste, curieux, neutre (English ids also work: ${EXPRESSIONS.join(', ')}). Keep the CAMERA keywords in English: shot types ${SHOT_TYPES.join(', ')}; movements ${SHOT_MOVEMENTS.join(', ')}. Stage directions are French sentences read by a parser; stick to these forms: "Lew regarde le CEO.", "Le CEO détourne le regard.", "Dev soupire.", "Lew regarde la caméra.", "Le CEO a l'air perdu.", "Ops hoche la tête.", "Lew se cale en arrière.", "Lew a un sourire en coin." (commands: ${ACTING_COMMANDS.join(', ')}).
+Speaker labels are the cast NAMES in capitals. Emotions in parentheses: ${EXPRESSIONS.join(', ')}. CAMERA keywords: shot types ${SHOT_TYPES.join(', ')}; movements ${SHOT_MOVEMENTS.join(', ')}. Stage directions are plain sentences read by a parser; stick to these forms: "Lew looks at CEO.", "CEO looks away.", "Dev sighs.", "Lew looks at the camera.", "CEO looks confused.", "Ops nods.", "Lew leans back.", "Lew smirks." (commands: ${ACTING_COMMANDS.join(', ')}).
 
 Reference script, the benchmark for tone:
 ${CHATBOT_VS_AGENT_SCRIPT}
+Its French version, the benchmark for scriptFr:
+${CHATBOT_VS_AGENT_SCRIPT_FR}
 Characters:
 ${chars}
 
@@ -87,6 +91,29 @@ ${envs}
 
 Templates:
 ${templates}`
+}
+/** Translates a script with Claude, keeping beats, CAMERA lines and speaker labels; stage directions and emotions in the target language. */
+export async function translateScript(script: string, from: ContentLanguage, to: ContentLanguage, settings: ClaudeSettings, signal?: AbortSignal): Promise<string> {
+  const { default: Anthropic } = await import('@anthropic-ai/sdk')
+  const client = new Anthropic({ apiKey: settings.apiKey, dangerouslyAllowBrowser: true, maxRetries: 1 })
+  const names = { en: 'English', fr: 'French' }
+  const directions = to === 'fr'
+    ? 'Stage directions in French in these forms: "Lew regarde le CEO.", "Le CEO détourne le regard.", "Dev soupire.", "Lew regarde la caméra.", "Le CEO a l\'air perdu.", "Ops hoche la tête.". Emotions: impassible, narquois, perdu, surpris, agacé, content, fatigué, triste, curieux, neutre.'
+    : 'Stage directions in English in these forms: "Lew looks at CEO.", "CEO looks away.", "Dev sighs.", "Lew looks at the camera.", "CEO looks confused.", "Ops nods.". Emotions: deadpan, smug, confused, surprised, annoyed, happy, tired, sad, curious, neutral.'
+  const response = await client.messages.create(
+    {
+      model: settings.model,
+      max_tokens: 3000,
+      system: `You translate short video scripts from ${names[from]} to ${names[to]} for Lew, an AI engineering brand. Keep every line in the same order, the same beats, the [mm:ss.s] times, the CAMERA lines verbatim, the PAUSE lines, and the speaker labels unchanged. Translate the dialogue as people speak, short and punchy, same meaning and same joke. ${directions} Call the tool once.`,
+      tools: [{ name: 'write_translation', description: 'The translated script.', strict: true, input_schema: { type: 'object', properties: { script: { type: 'string' } }, required: ['script'], additionalProperties: false } }],
+      tool_choice: { type: 'tool', name: 'write_translation' },
+      messages: [{ role: 'user', content: script }]
+    },
+    { signal }
+  )
+  const call = response.content.find((b) => b.type === 'tool_use')
+  if (!call || call.type !== 'tool_use') throw new Error('No translation returned.')
+  return String((call.input as { script?: string }).script ?? '')
 }
 export interface GeneratedProject {
   project: ContentProject
@@ -131,6 +158,7 @@ export interface GenerationInput {
   template?: string
   cast: { role: string; kind: string; name: string; mark?: string }[]
   script: string
+  scriptFr?: string
   reply?: string
 }
 /** Turns the model's answer into a compiled project; bad values fall back with a warning rather than failing. */
@@ -163,6 +191,7 @@ export function projectFromGeneration(input: GenerationInput): GeneratedProject 
     studio.addCharacter('lew')
   }
   warnings.push(...studio.setScript(String(input.script ?? '')))
+  if (input.scriptFr) studio.setAltScript('fr', String(input.scriptFr))
   const compiled = studio.compileTimeline()
   warnings.push(...compiled.warnings)
   return { project: studio.project, reply: String(input.reply ?? ''), warnings }

@@ -20,7 +20,8 @@ import { subjectOf } from '@/studio/timeline/evaluate'
 import { download, ExportCancelled, renderStill, renderVideo, slug } from '@/studio/export/video'
 import { ContentStudio } from '@/studio/content/api'
 import { newProjectId, parseProject, projectFromScene, serializeProject, validateProject, type ContentProject, type ProjectStatus } from '@/studio/content/project'
-import { generateProject } from '@/studio/content/generate'
+import { generateProject, translateScript } from '@/studio/content/generate'
+import type { ContentLanguage } from '@/studio/audio/plan'
 import { buildExample, EXAMPLE_REELS } from '@/studio/content/examples'
 import { OUTPUT_PRESETS, renderPlan, type OutputFormat } from '@/studio/render/presets'
 import { loadLibrary, saveLibrary } from './useProject'
@@ -183,6 +184,42 @@ export function useStudioDocument() {
   }
   function cancelGenerate() {
     generateAbort?.abort()
+  }
+  /**
+   * The same reel in the other language: from the stored script when the project
+   * carries one, else translated by Claude with the user's key, else a copy to
+   * translate by hand. Voices are dropped: they would be in the wrong language.
+   */
+  async function createVariant(language: ContentLanguage) {
+    const source = project.value
+    if (source.voice.language === language) return
+    const existing = projects.value.find((p) => p.metadata.variantOf === source.id && p.voice.language === language)
+    if (existing) {
+      openProject(existing.id)
+      return
+    }
+    const studio = new ContentStudio(structuredClone(source))
+    const stored = source.scripts?.[language]
+    let note = stored ? `${language === 'fr' ? 'French' : 'English'} version from the stored script` : 'Copied: translate the script by hand'
+    if (!stored && claude.value.apiKey) {
+      generating.value = true
+      generateAbort = new AbortController()
+      try {
+        const translated = await translateScript(studio.script(), source.voice.language, language, { apiKey: claude.value.apiKey, model: claude.value.model }, generateAbort.signal)
+        studio.setAltScript(language, translated)
+        note = `${language === 'fr' ? 'French' : 'English'} version translated by Claude; read it before you render`
+      } catch (e) {
+        note = `Translation failed (${e instanceof Error ? e.message : String(e)}); copied instead`
+      } finally {
+        generating.value = false
+      }
+    }
+    const variant = studio.variant(language)
+    variant.title = `${source.title} (${language.toUpperCase()})`
+    variant.scene.name = variant.title
+    projects.value = [variant, ...projects.value]
+    openProject(variant.id)
+    message.value = note
   }
   // --- Transport --------------------------------------------------------------
   function seek(value: number) {
@@ -595,6 +632,7 @@ export function useStudioDocument() {
     setStatus,
     generate,
     cancelGenerate,
+    createVariant,
     seek,
     togglePlay,
     step,

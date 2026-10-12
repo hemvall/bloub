@@ -60,6 +60,8 @@ export interface ProjectMeta {
   notes: string
   /** Small JPEG data URL captured from the engine for the library. */
   thumbnail?: string
+  /** The project this one is a language version of. */
+  variantOf?: string
 }
 export interface ContentProject {
   version: 1
@@ -80,6 +82,8 @@ export interface ContentProject {
   cues: ActingCue[]
   /** Explicit length in seconds; otherwise the last beat plus a short tail. */
   duration?: number
+  /** The script in other languages, kept as text: what a language version starts from. */
+  scripts?: Partial<Record<VoiceConfig['language'], string>>
   voice: VoiceConfig
   audio: AudioConfig
   scene: SceneData
@@ -128,7 +132,7 @@ export function createProject(options: CreateOptions = {}): ContentProject {
     dialogue: [],
     shots: [],
     cues: [],
-    voice: { ...structuredClone(DEFAULT_VOICE), language: options.language ?? 'fr' },
+    voice: { ...structuredClone(DEFAULT_VOICE), language: options.language ?? 'en' },
     audio: structuredClone(DEFAULT_AUDIO),
     scene,
     metadata: { createdAt: now, updatedAt: now, tags: [], notes: '' }
@@ -224,6 +228,13 @@ export function validateProject(input: unknown): ContentProject {
   // Older projects carry no audio block: they get the defaults rather than a refusal.
   if (p.voice === undefined) p.voice = structuredClone(DEFAULT_VOICE)
   if (p.audio === undefined) p.audio = structuredClone(DEFAULT_AUDIO)
+  if (p.scripts !== undefined) {
+    const scripts = record(p.scripts, 'scripts')
+    for (const [lang, value] of Object.entries(scripts)) {
+      one(lang, ['fr', 'en'] as const, 'script language')
+      text(value, 'alternate script', 20_000, true)
+    }
+  }
   const voice = record(p.voice, 'voice config')
   one(voice.provider, TTS_PROVIDERS, 'voice provider')
   one(voice.language, ['fr', 'en'] as const, 'language')
@@ -260,6 +271,7 @@ export function validateProject(input: unknown): ContentProject {
   list(meta.tags, 20, 'tags').forEach((t) => text(t, 'tag', 40))
   text(meta.notes, 'notes', 2000, true)
   if (meta.thumbnail !== undefined) text(meta.thumbnail, 'thumbnail', 200_000)
+  if (meta.variantOf !== undefined) text(meta.variantOf, 'variantOf', 60)
   const scene = validateScene(p.scene)
   const project = structuredClone(p) as unknown as ContentProject
   project.scene = scene

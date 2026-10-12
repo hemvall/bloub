@@ -7,7 +7,8 @@ import { CHARACTERS } from '../characters/catalog'
 import type { ActingCommand } from './acting'
 import { compileProject, type CompileResult } from './compile'
 import { LINE_GAP, parseScript, printScript } from './script'
-import { castMember, createProject, parseProject, serializeProject, type ActingCue, type AudioConfig, type CastMember, type ContentProject, type CreateOptions, type DialogueLine, type LineAudio, type ProjectStatus, type Shot, type VoiceConfig } from './project'
+import { castMember, createProject, newProjectId, parseProject, serializeProject, type ActingCue, type AudioConfig, type CastMember, type ContentProject, type CreateOptions, type DialogueLine, type LineAudio, type ProjectStatus, type Shot, type VoiceConfig } from './project'
+import type { ContentLanguage } from '../audio/plan'
 import { findTemplate } from './templates'
 /**
  * The programmatic surface of the studio. The Vue store calls this; an agent
@@ -36,7 +37,9 @@ export class ContentStudio {
       })
     )
     studio.project.metadata.tags = [...template.tags]
-    studio.setScript(template.script)
+    const language = studio.project.voice.language
+    studio.setScript(template.script[language])
+    studio.setAltScript(language === 'en' ? 'fr' : 'en', template.script[language === 'en' ? 'fr' : 'en'])
     studio.compileTimeline()
     return studio
   }
@@ -294,6 +297,33 @@ export class ContentStudio {
   }
   script() {
     return printScript(this.project, this.project.voice.language)
+  }
+  /** Keeps a version of the script in another language, as text, next to the project. */
+  setAltScript(language: ContentLanguage, text: string) {
+    if (language === this.project.voice.language) return
+    this.project.scripts = { ...this.project.scripts, [language]: text }
+    this.touch()
+  }
+  /**
+   * A new project in another language: same cast, set, shots and sound, the
+   * script taken from the stored version when there is one, else the current
+   * text to translate. Voice clips are not carried over: they are in the wrong language.
+   */
+  variant(language: ContentLanguage, now = new Date().toISOString()): ContentProject {
+    const source = this.project
+    const copy = structuredClone(source)
+    copy.id = newProjectId()
+    copy.status = 'draft'
+    copy.voice = { ...copy.voice, language }
+    copy.scripts = { ...copy.scripts, [source.voice.language]: this.script() }
+    delete copy.scripts[language]
+    copy.metadata = { ...copy.metadata, createdAt: now, updatedAt: now, renderedAt: undefined, thumbnail: undefined, variantOf: source.id }
+    const studio = new ContentStudio(copy)
+    studio.clearVoice()
+    const stored = source.scripts?.[language]
+    if (stored) studio.setScript(stored)
+    studio.compileTimeline()
+    return studio.project
   }
   /** Re-applies clip lengths to the lines that carry one (after a script edit that kept them). */
   retime() {

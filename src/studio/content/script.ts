@@ -73,7 +73,7 @@ function emotionOf(token: string): Expression | undefined {
   if (t in ACTING && ACTING[t as ActingCommand].expression) return ACTING[t as ActingCommand].expression
   return undefined
 }
-export function parseScript(text: string, cast: CastMember[], _language: ContentLanguage = 'fr'): ParsedScript {
+export function parseScript(text: string, cast: CastMember[], _language: ContentLanguage = 'en'): ParsedScript {
   const out: ParsedScript = { dialogue: [], shots: [], cues: [], warnings: [] }
   let cursor = 0,
     last: string | undefined,
@@ -229,7 +229,7 @@ function label(cast: CastMember[], role: string) {
 }
 export function printScript(
   project: { cast: CastMember[]; dialogue: DialogueLine[]; shots: Shot[]; cues: ActingCue[] },
-  language: ContentLanguage = 'fr'
+  language: ContentLanguage = 'en'
 ): string {
   type Item = { time: number; order: number; text: string }
   const items: Item[] = []
@@ -260,9 +260,9 @@ export function printScript(
   }
   return blocks.join('\n').trim() + '\n'
 }
-export const SCRIPT_HELP = `[00:00.0]            temps (mm:ss.s) ; sans lui les répliques s'enchaînent
-CAMERA: ${SHOT_TYPES.join(' | ')} <qui> [slow-push | push-in | pull-out | slow-pan]
-   (ou en français : gros plan, plan moyen, plan large, profil, plan à deux, épaule, zoom lent…)
-LEW (impassible): "Une réplique."   émotion et/ou durée (2.4s) entre parenthèses
-Lew regarde le CEO.  directions en phrases : hoche la tête, soupire, détourne le regard, a l'air perdu…
+export const SCRIPT_HELP = `[00:00.0]            time (mm:ss.s); without it lines follow each other
+CAMERA: ${SHOT_TYPES.join(' | ')} <who> [slow-push | push-in | pull-out | slow-pan]
+   (French also reads: gros plan, plan moyen, plan large, profil, plan à deux, épaule, zoom lent)
+LEW (deadpan): "A line."   emotion and/or a duration like (2.4s) in parentheses
+Lew looks at CEO.    stage directions as plain sentences: nods, sighs, looks away, looks confused…
 PAUSE 0.4`

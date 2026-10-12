@@ -2,9 +2,11 @@
 
 **Scene Studio** lives at `/studio` or `/#studio`: a content engine for short vertical videos
 about AI agents and automation, built around Lew, the recurring main character. A project is a
-script, in French (lines, shots, stage directions) that compiles deterministically into a 3D
+script, in English with a French version behind it (lines, shots, stage directions), that
+compiles deterministically into a 3D
 scene: cuts, gaze, listening, subtitles with the spoken word highlighted, voices from OpenAI or
-ElevenLabs with your key, procedural or imported music, room tone and SFX mixed offline, then a
+ElevenLabs with your key, real Creative Commons music from the Internet Archive or your own files,
+room tone and SFX mixed offline, then a
 1080x1920 MP4 with an AAC track straight from the browser. Six sets (Lew's office at night, a meeting room, an abstract AI lab, and the
 original bar, rooftop and stage), six characters (Lew, a CEO and a developer archetype, plus Kit,
 Pip and Bo), templates, a library, a chat director, and an optional Claude generator that turns a

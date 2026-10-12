@@ -52,7 +52,7 @@ export interface VoiceConfig {
   /** Delivery notes per role (OpenAI reads them; ElevenLabs ignores them). */
   instructions: Record<string, string>
 }
-export const DEFAULT_VOICE: VoiceConfig = { provider: 'none', language: 'fr', voices: {}, model: '', instructions: {} }
+export const DEFAULT_VOICE: VoiceConfig = { provider: 'none', language: 'en', voices: {}, model: '', instructions: {} }
 /** What a generated clip leaves in the project: enough to time and animate without the bytes. */
 export interface LineAudio {
   hash: string

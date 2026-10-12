@@ -119,13 +119,17 @@ function kindLabel(kind: CharacterKind) {
     </div>
     <p v-if="!project.cast.length" class="empty">No cast. Add Lew first.</p>
     <h4>
-      Script
+      Script <small>{{ project.voice.language === 'fr' ? 'français' : 'English' }}</small>
       <span>
+        <button class="ghost" :title="project.voice.language === 'en' ? 'Create the French version of this reel' : 'Create the English version of this reel'" :disabled="studio.generating.value" @click="studio.createVariant(project.voice.language === 'en' ? 'fr' : 'en')">
+          <Icon name="dup" /> {{ project.voice.language === 'en' ? 'FR version' : 'EN version' }}
+        </button>
         <button class="ghost icon-only" title="Format help" :aria-expanded="help" @click="help = !help">?</button>
       </span>
     </h4>
+    <p v-if="project.metadata.variantOf" class="note">Language version of another reel; voices are regenerated per language.</p>
     <pre v-if="help" class="script-help">{{ SCRIPT_HELP }}</pre>
-    <textarea v-model="draft" class="script-text" rows="18" spellcheck="false" aria-label="Script" placeholder="CAMERA: two-shot Lew CEO&#10;CEO (perdu): &quot;On a déjà ChatGPT.&quot;" />
+    <textarea v-model="draft" class="script-text" rows="18" spellcheck="false" aria-label="Script" placeholder="CAMERA: two-shot Lew CEO&#10;CEO (confused): &quot;We already have ChatGPT.&quot;" />
     <div class="script-actions">
       <button class="primary" :disabled="!draft.trim()" @click="apply"><Icon name="refresh" /> {{ dirty ? 'Apply & compile' : 'Recompile' }}</button>
       <button v-if="dirty" class="ghost" @click="reset">Revert</button>
