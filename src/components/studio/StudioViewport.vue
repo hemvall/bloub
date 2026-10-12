@@ -1,52 +1,102 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { TresCanvas } from '@tresjs/core'
-import * as THREE from 'three'
-import SceneCharacter from './SceneCharacter.vue'
-import type { StudioScene } from '@/studio/types'
-
-const props = defineProps<{ scene: StudioScene }>()
-const cameraPosition = computed(() => [props.scene.camera.x, props.scene.camera.y, props.scene.camera.z] as [number,number,number])
-const characterPosition = computed(() => [props.scene.characterPosition.x, props.scene.characterPosition.y, props.scene.characterPosition.z] as [number,number,number])
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { SceneEngine } from '@/studio/engine/SceneEngine'
+import type { CameraPose, SceneData, Vec3 } from '@/studio/scene/model'
+const props = defineProps<{
+  scene: SceneData
+  selected: string
+  mode: 'translate' | 'rotate' | 'scale'
+}>()
+const emit = defineEmits<{
+  frame: [time: number, fps: number, ms: number, playing: boolean]
+  select: [id: string]
+  camera: [pose: CameraPose]
+  transform: [id: string, position: Vec3, rotation: Vec3, scale: number]
+  error: [message: string]
+}>()
+const host = ref<HTMLElement>(),
+  surface = ref<HTMLElement>(),
+  error = ref('')
+let engine: SceneEngine | undefined, observer: ResizeObserver | undefined
+const fit = ref({ width: '100%', height: '100%' })
+const ratio = computed(() =>
+  props.scene.aspect === '16:9' ? 16 / 9 : props.scene.aspect === '9:16' ? 9 / 16 : 1
+)
+function resize() {
+  if (!surface.value) return
+  const w = Math.max(1, surface.value.clientWidth - 48),
+    h = Math.max(1, surface.value.clientHeight - 72)
+  fit.value =
+    w / h > ratio.value
+      ? { width: `${h * ratio.value}px`, height: `${h}px` }
+      : { width: `${w}px`, height: `${w / ratio.value}px` }
+}
+onMounted(() => {
+  try {
+    engine = new SceneEngine(host.value!, props.scene, {
+      frame: (t, fps, ms) => emit('frame', t, fps, ms, engine?.playing ?? false),
+      select: (id) => emit('select', id),
+      camera: (pose) => emit('camera', pose),
+      transform: (id, p, r, s) => emit('transform', id, p, r, s),
+      error: (message) => {
+        error.value = message
+        emit('error', message)
+      }
+    })
+    engine.select(props.selected)
+    observer = new ResizeObserver(resize)
+    observer.observe(surface.value!)
+    resize()
+  } catch (e) {
+    error.value = `Viewport unavailable: ${e instanceof Error ? e.message : String(e)}`
+    emit('error', error.value)
+  }
+})
+watch(
+  () => props.scene,
+  (scene) => engine?.setScene(scene)
+)
+watch(
+  () => props.selected,
+  (id) => engine?.select(id)
+)
+watch(
+  () => props.mode,
+  (mode) => engine?.setTransformMode(mode)
+)
+watch(ratio, resize)
+onBeforeUnmount(() => {
+  observer?.disconnect()
+  engine?.dispose()
+})
+defineExpose({
+  seek: (time: number) => engine?.seek(time),
+  play: () => engine?.play(),
+  pause: () => engine?.pause(),
+  setCamera: (pose: CameraPose) => engine?.setCameraPose(pose),
+  cameraPose: () => engine?.getCameraPose()
+})
 </script>
-
 <template>
-  <div class="studio-viewport">
-    <TresCanvas clear-color="#120f18" shadows window-size>
-      <TresPerspectiveCamera :position="cameraPosition" :fov="42" />
-      <TresAmbientLight :intensity="1.15" />
-      <TresDirectionalLight :position="[-3,5,4]" :intensity="2.4" cast-shadow />
-      <TresPointLight :position="[-3.5,2.8,1]" :intensity="18" color="#ffc777" :distance="8" />
-      <TresPointLight :position="[3.5,2.8,1]" :intensity="18" color="#ffd398" :distance="8" />
-
-      <TresMesh :position="[0, 0, -2.35]">
-        <TresPlaneGeometry :args="[11,7]" />
-        <TresMeshStandardMaterial color="#211725" roughness="1" />
-      </TresMesh>
-      <TresMesh :position="[0,-1.65,0]" receive-shadow>
-        <TresBoxGeometry :args="[9,0.35,3.2]" />
-        <TresMeshStandardMaterial color="#2a151a" roughness="0.72" />
-      </TresMesh>
-
-      <TresGroup :position="[0,0,-2.0]">
-        <TresMesh :position="[0,1.7,0.03]">
-          <TresCircleGeometry :args="[1.25, 48]" />
-          <TresMeshStandardMaterial color="#141725" roughness="0.45" />
-        </TresMesh>
-        <TresMesh :position="[0,1.7,0.06]">
-          <TresRingGeometry :args="[1.18,1.24,48]" />
-          <TresMeshBasicMaterial color="#3c2b43" />
-        </TresMesh>
-      </TresGroup>
-
-      <SceneCharacter :character="scene.character" :position="characterPosition" :look-at-camera="scene.lookAtCamera" />
-
-      <TresFog color="#120f18" :near="6" :far="12" />
-    </TresCanvas>
-    <div class="viewport-hud">
-      <span>LIVE</span>
-      <strong>60 FPS target</strong>
-      <small>Three.js · browser render</small>
+  <div ref="surface" class="studio-surface">
+    <div class="surface-label">
+      <span class="live-dot" />
+      REALTIME VIEWPORT
+      <span>{{ scene.aspect }} · {{ scene.fps }} fps output</span>
+    </div>
+    <div ref="host" class="studio-canvas" :style="fit">
+      <div v-if="error" class="viewport-error">{{ error }}</div>
+      <span class="frame-corner tl" />
+      <span class="frame-corner br" />
+    </div>
+    <div class="surface-help">
+      Drag to orbit
+      <span>·</span>
+      Right drag to pan
+      <span>·</span>
+      Scroll to dolly
+      <span>·</span>
+      Click to select
     </div>
   </div>
 </template>

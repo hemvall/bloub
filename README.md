@@ -1,5 +1,11 @@
 # bloub
 
+**Scene Studio** is available at `/studio` or `/#studio`: a browser-native Three.js editor
+with an original toon cat mascot, a layered rainy night bar, camera and character
+keyframes, deterministic gaze/idle animation, and portable scene JSON. See the
+[Scene Studio guide](docs/scene-studio.md) for editing, architecture and the future video pipeline.
+The original SVG animation editor remains at `/`.
+
 An SVG recreation of the x.ai bot avatar: **one filled black shape** that morphs
 between 14 states, **two white shapes** for the eyes that morph independently, on
 a plain background. No animation library.
