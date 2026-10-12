@@ -10,6 +10,7 @@ import { cameraAt, characterAt, eyesOf, faceAt, speakingAt } from '../timeline/e
 import { gazeAt } from '../animation/gaze'
 import { actionsAt } from '../animation/actions'
 import { createCharacter, type CharacterRig } from '../characters'
+import { CHARACTERS, idleProfile } from '../characters/catalog'
 import { buildEnvironment, ENVIRONMENTS, type EnvironmentInstance } from '../environments'
 import { createProp, tintProp } from '../props/createProp'
 import { disposeTree } from './geometry'
@@ -186,8 +187,9 @@ export class SceneEngine {
         this.characters.set(c.id, rig)
         this.world.add(rig.root)
       }
+    // A prop is rebuilt when its kind or its screen content changes; everything else updates in place.
     for (const [id, prop] of this.props)
-      if (!scene.props.some((p) => p.id === id && p.kind === prop.userData.kind)) {
+      if (!scene.props.some((p) => p.id === id && p.kind === prop.userData.kind && (p.screen ?? '') === prop.userData.screen)) {
         this.world.remove(prop)
         disposeTree(prop)
         this.props.delete(id)
@@ -197,6 +199,7 @@ export class SceneEngine {
       if (!obj) {
         obj = createProp(p)
         obj.userData.kind = p.kind
+        obj.userData.screen = p.screen ?? ''
         this.props.set(p.id, obj)
         this.world.add(obj)
       }
@@ -281,7 +284,8 @@ export class SceneEngine {
         gaze: gazeAt(gazeScene, c, t, this.resolveTarget),
         face: faceAt(scene, c, t),
         action: actionsAt(scene.timeline, c.id, t),
-        speaking: speakingAt(scene, c.id, t)
+        speaking: speakingAt(scene, c.id, t),
+        idle: idleProfile(CHARACTERS[c.kind].personality)
       })
     })
     this.environment.update(t, scene.environment)
@@ -301,7 +305,7 @@ export class SceneEngine {
   }
   /**
    * Offline rendering at an explicit size. The returned `frame` draws the
-   * composited image (3D + captions) into any 2D context, for any timestamp.
+   * composited image (3D + subtitles) into any 2D context, for any timestamp.
    */
   capture(width: number, height: number) {
     this.capturing = true

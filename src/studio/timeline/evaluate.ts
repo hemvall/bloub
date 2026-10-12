@@ -38,13 +38,18 @@ export function sample<T>(
   }
   return previous.value
 }
+/** Camera keys ease between each other, except that a key marked `cut` holds the previous pose until its time. */
 export function cameraAt(scene: SceneData, time: number): CameraPose {
-  return sample(
-    scene.timeline.filter((e) => e.type === 'camera').map((e) => ({ time: e.time, value: e.pose })),
-    scene.camera,
-    time,
-    mixCamera
-  )
+  let previous: { time: number; pose: CameraPose } = { time: 0, pose: scene.camera }
+  for (const e of ordered(scene.timeline)) {
+    if (e.type !== 'camera') continue
+    if (e.time > time) {
+      if (e.cut || e.time === previous.time) return previous.pose
+      return mixCamera(previous.pose, e.pose, smooth(Math.max(0, (time - previous.time) / (e.time - previous.time))))
+    }
+    previous = e
+  }
+  return previous.pose
 }
 export function characterAt(
   scene: SceneData,
@@ -88,6 +93,7 @@ export function faceAt(scene: SceneData, character: CharacterData, time: number)
 }
 export interface ActiveDialogue {
   character: CharacterData
+  line: Extract<TimelineEvent, { type: 'dialogue' }>
   text: string
   progress: number
   since: number
@@ -101,6 +107,7 @@ export function dialogueAt(scene: SceneData, time: number): ActiveDialogue[] {
     if (character)
       result.push({
         character,
+        line: e,
         text: e.text,
         progress: (time - e.time) / e.duration,
         since: time - e.time,

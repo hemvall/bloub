@@ -1,51 +1,53 @@
-import type { SceneData } from '@/studio/scene/model'
-import { parseScene, serializeScene, validateScene } from '@/studio/serialization/scene'
-import { EXAMPLES } from '@/studio/scene/examples'
-export interface ProjectEntry {
-  id: string
-  scene: SceneData
-}
-const KEY = 'bloub-studio-project-v2'
-const LEGACY_KEY = 'bloub-scene-v1'
-export function newEntryId() {
-  return `s-${Date.now().toString(36)}${Math.floor(Math.random() * 1e4).toString(36)}`
-}
-/** Loads the saved project, or seeds it with the examples (and a legacy v1 scene if present). */
-export function loadProject(): { entries: ProjectEntry[]; active: string } {
+import { validateScene } from '@/studio/serialization/scene'
+import { projectFromScene, serializeProject, validateProject, type ContentProject } from '@/studio/content/project'
+import { chatbotVsAgent } from '@/studio/content/demo'
+/** Browser storage of the content library: a list of projects, validated on the way in. */
+const KEY = 'bloub-studio-library-v1'
+const LEGACY_KEYS = ['bloub-studio-project-v2', 'bloub-scene-v1']
+export function loadLibrary(): { projects: ContentProject[]; active: string } {
   try {
     const raw = localStorage.getItem(KEY)
     if (raw) {
-      const parsed = JSON.parse(raw) as { entries?: unknown; active?: unknown }
-      const entries = (Array.isArray(parsed.entries) ? parsed.entries : [])
-        .map((e) => {
+      const parsed = JSON.parse(raw) as { projects?: unknown; active?: unknown }
+      const projects = (Array.isArray(parsed.projects) ? parsed.projects : [])
+        .map((p) => {
           try {
-            const r = e as { id?: unknown; scene?: unknown }
-            return { id: String(r.id ?? newEntryId()), scene: validateScene(r.scene) }
+            return validateProject(p)
           } catch {
             return null
           }
         })
-        .filter((e): e is ProjectEntry => !!e)
-      if (entries.length) {
-        const active = entries.some((e) => e.id === parsed.active) ? String(parsed.active) : entries[0]!.id
-        return { entries, active }
+        .filter((p): p is ContentProject => !!p)
+      if (projects.length) {
+        const active = projects.some((p) => p.id === parsed.active) ? String(parsed.active) : projects[0]!.id
+        return { projects, active }
       }
     }
   } catch {
     /* storage is optional */
   }
-  const entries = EXAMPLES.map((x) => ({ id: `example-${x.id}`, scene: x.build() }))
-  try {
-    const legacy = localStorage.getItem(LEGACY_KEY)
-    if (legacy) entries.unshift({ id: newEntryId(), scene: parseScene(legacy) })
-  } catch {
-    /* ignore a broken legacy document */
-  }
-  return { entries, active: entries[0]!.id }
+  const projects: ContentProject[] = [chatbotVsAgent()]
+  // Scenes saved by the previous studio become script-less projects.
+  for (const key of LEGACY_KEYS)
+    try {
+      const raw = localStorage.getItem(key)
+      if (!raw) continue
+      const parsed = JSON.parse(raw) as { entries?: { id?: unknown; scene?: unknown }[] }
+      const scenes = Array.isArray(parsed.entries) ? parsed.entries.map((e) => e.scene) : [parsed]
+      for (const s of scenes)
+        try {
+          projects.push(projectFromScene(validateScene(s)))
+        } catch {
+          /* skip a broken scene */
+        }
+    } catch {
+      /* ignore */
+    }
+  return { projects, active: projects[0]!.id }
 }
-export function saveProject(entries: ProjectEntry[], active: string): boolean {
+export function saveLibrary(projects: ContentProject[], active: string): boolean {
   try {
-    localStorage.setItem(KEY, JSON.stringify({ entries: entries.map((e) => ({ id: e.id, scene: JSON.parse(serializeScene(e.scene)) })), active }))
+    localStorage.setItem(KEY, JSON.stringify({ projects: projects.map((p) => JSON.parse(serializeProject(p))), active }))
     return true
   } catch {
     return false

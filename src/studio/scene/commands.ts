@@ -13,6 +13,7 @@ import {
   type PropData,
   type PropKind,
   type SceneData,
+  type SubtitleStyle,
   type TimelineEvent,
   type Vec3
 } from './model'
@@ -23,9 +24,9 @@ import { readingTime } from '../timeline/evaluate'
 import { presetPose, type PresetName } from '../camera/presets'
 import { subjectOf } from '../timeline/evaluate'
 /**
- * The only way to change a document. UI, chat director and agents call the same
- * methods. Commands mutate the document they are given; callers work on a copy
- * and validate before adopting it.
+ * The only way to change a document. UI, chat director, the content compiler
+ * and agents call the same methods. Commands mutate the document they are
+ * given; callers work on a copy and validate before adopting it.
  */
 export class SceneCommands {
   constructor(public scene: SceneData) {}
@@ -62,6 +63,9 @@ export class SceneCommands {
   setFps(fps: number) {
     this.scene.fps = fps
   }
+  setSubtitles(patch: Partial<SubtitleStyle>) {
+    Object.assign(this.scene.subtitles, structuredClone(patch))
+  }
   /** Switching environment resets atmosphere, base camera, seats, and gazes at the old anchors. */
   setEnvironment(patch: Partial<EnvironmentSettings>) {
     if (patch.id && patch.id !== this.scene.environment.id) {
@@ -94,11 +98,11 @@ export class SceneCommands {
     this.scene.camera = structuredClone(pose)
   }
   // --- Characters ------------------------------------------------------------
-  /** Without a position, the character takes the next seat of the environment. */
-  addCharacter(kind: CharacterKind, overrides: Partial<Omit<CharacterData, 'kind'>> = {}) {
+  /** Without a position, the character takes the named mark, or the next seat of the environment. */
+  addCharacter(kind: CharacterKind, overrides: Partial<Omit<CharacterData, 'kind'>> & { mark?: string } = {}) {
     const def = CHARACTERS[kind]
-    const seats = ENVIRONMENTS[this.scene.environment.id].seats
-    const seat = seats[this.scene.characters.length % seats.length]!
+    const env = ENVIRONMENTS[this.scene.environment.id]
+    const seat = (overrides.mark && env.marks[overrides.mark]) || env.seats[this.scene.characters.length % env.seats.length]!
     const character: CharacterData = {
       id: this.freeId(overrides.id ?? kind),
       name: overrides.name ?? def.name,
@@ -175,8 +179,15 @@ export class SceneCommands {
     return event
   }
   // --- Camera ----------------------------------------------------------------
-  addCameraKeyframe(time: number, pose: CameraPose) {
-    this.key({ id: uid('k'), type: 'camera', time, pose: structuredClone(pose) })
+  addCameraKeyframe(time: number, pose: CameraPose, options: { cut?: boolean; label?: string } = {}) {
+    this.key({
+      id: uid('k'),
+      type: 'camera',
+      time,
+      pose: structuredClone(pose),
+      ...(options.cut && { cut: true }),
+      ...(options.label && { label: options.label })
+    })
   }
   /** Frames a preset on a character (the first one by default) and records it at `time`. */
   cameraPreset(name: PresetName, time: number, subject?: string) {
@@ -195,7 +206,8 @@ export class SceneCommands {
       position: overrides.position ? [...overrides.position] : [0, 0, 0],
       rotation: overrides.rotation ? [...overrides.rotation] : [0, 0, 0],
       scale: overrides.scale ?? 1,
-      color: overrides.color ?? PROP_COLORS[kind]
+      color: overrides.color ?? PROP_COLORS[kind],
+      ...(overrides.screen && { screen: overrides.screen })
     }
     this.scene.props.push(prop)
     return prop
@@ -204,6 +216,7 @@ export class SceneCommands {
     const p = this.scene.props.find((p) => p.id === id)
     if (!p) throw new Error(`Unknown prop: ${id}`)
     Object.assign(p, structuredClone(patch))
+    if (p.screen === undefined) delete p.screen
   }
   removeProp(id: string) {
     this.scene.props = this.scene.props.filter((p) => p.id !== id)
@@ -287,7 +300,14 @@ export const PROP_COLORS: Record<PropKind, string> = {
   cup: '#e9e2d6',
   plant: '#5e9a62',
   book: '#b35a4c',
-  lamp: '#f0d7a8'
+  lamp: '#f0d7a8',
+  laptop: '#2c2f36',
+  phone: '#1f2229',
+  monitor: '#23262e',
+  coffee: '#3b6e8f',
+  whiteboard: '#f6f5f0',
+  documents: '#f3efe6',
+  server: '#1b2230'
 }
 export function activeAction(scene: SceneData, character: string, time: number) {
   return scene.timeline.find(
@@ -297,4 +317,12 @@ export function activeAction(scene: SceneData, character: string, time: number) 
       time >= e.time &&
       time < e.time + ACTION_DURATION[e.action]
   )
+}
+/** Rewrites event ids in timeline order so two compilations of the same project are byte-identical. */
+export function renumberEvents(scene: SceneData) {
+  scene.timeline.sort((a, b) => a.time - b.time || a.type.localeCompare(b.type))
+  scene.timeline.forEach((e, i) => {
+    e.id = `k-${i + 1}`
+  })
+  return scene
 }

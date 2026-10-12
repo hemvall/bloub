@@ -1,4 +1,4 @@
-import { ref, watch } from 'vue'
+import { ref, watch, type Ref } from 'vue'
 import type { SceneData } from '@/studio/scene/model'
 import { applyScript, type DirectorScript } from '@/studio/director/script'
 import { localDirector } from '@/studio/director/local'
@@ -13,16 +13,16 @@ export interface Turn {
 }
 export type DirectorEngine = 'auto' | 'local' | 'claude'
 const SETTINGS_KEY = 'bloub-studio-director'
-interface Settings {
+export interface ClaudeUserSettings {
   apiKey: string
   model: DirectorModel
   engine: DirectorEngine
 }
-function loadSettings(): Settings {
+function loadSettings(): ClaudeUserSettings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY)
     if (raw) {
-      const s = JSON.parse(raw) as Partial<Settings>
+      const s = JSON.parse(raw) as Partial<ClaudeUserSettings>
       return {
         apiKey: typeof s.apiKey === 'string' ? s.apiKey : '',
         model: DIRECTOR_MODELS.includes(s.model as DirectorModel) ? (s.model as DirectorModel) : 'claude-opus-5',
@@ -34,23 +34,31 @@ function loadSettings(): Settings {
   }
   return { apiKey: '', model: 'claude-opus-5', engine: 'auto' }
 }
+let shared: Ref<ClaudeUserSettings> | undefined
+/** One settings object for the chat director and the project generator: the key is entered once. */
+export function useClaudeSettings() {
+  if (!shared) {
+    shared = ref<ClaudeUserSettings>(loadSettings())
+    watch(
+      shared,
+      (s) => {
+        try {
+          localStorage.setItem(SETTINGS_KEY, JSON.stringify(s))
+        } catch {
+          /* optional */
+        }
+      },
+      { deep: true }
+    )
+  }
+  return shared
+}
 export function useDirector(getScene: () => SceneData, adopt: (scene: SceneData, note?: string) => void) {
   const turns = ref<Turn[]>([])
   const busy = ref(false)
-  const settings = ref<Settings>(loadSettings())
+  const settings = useClaudeSettings()
   const settingsOpen = ref(false)
   let abort: AbortController | undefined
-  watch(
-    settings,
-    (s) => {
-      try {
-        localStorage.setItem(SETTINGS_KEY, JSON.stringify(s))
-      } catch {
-        /* optional */
-      }
-    },
-    { deep: true }
-  )
   function engineFor(): 'local' | 'claude' {
     if (settings.value.engine === 'local') return 'local'
     if (settings.value.engine === 'claude') return 'claude'

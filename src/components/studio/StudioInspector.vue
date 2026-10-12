@@ -6,8 +6,11 @@ import { ACTIONS, EXPRESSIONS, type GazeTarget, type Vec3 } from '@/studio/scene
 import { ENVIRONMENTS } from '@/studio/environments/catalog'
 import { ACTION_DURATION, ACTION_LABELS } from '@/studio/animation/actions'
 import { activeAction } from '@/studio/scene/commands'
+import { SCREEN_PROPS } from '@/studio/props/createProp'
+import { SCREEN_IDS, SCREEN_LABELS } from '@/studio/props/screens'
+import { CHARACTERS } from '@/studio/characters/catalog'
 const props = defineProps<{ studio: StudioDocument }>()
-const { scene, liveScene, selected, event, camera, time } = props.studio
+const { scene, liveScene, selected, event, camera, time, message } = props.studio
 const character = computed(() => liveScene.value.characters.find((c) => c.id === selected.value))
 const prop = computed(() => scene.value.props.find((p) => p.id === selected.value))
 const light = computed(() => scene.value.lights.find((l) => l.id === selected.value))
@@ -26,6 +29,7 @@ const eventCharacter = computed(() => {
   const e = event.value
   return e && 'character' in e ? scene.value.characters.find((c) => c.id === e.character) : undefined
 })
+const screenValue = computed(() => (prop.value?.screen?.startsWith('data:') ? 'image' : (prop.value?.screen ?? 'blank')))
 function num(ev: Event, fallback = 0) {
   const n = Number((ev.target as HTMLInputElement).value)
   return Number.isFinite(n) ? n : fallback
@@ -39,6 +43,27 @@ function gaze(ev: Event) {
   const v = (ev.target as HTMLSelectElement).value
   const target: GazeTarget = v === 'camera' ? { kind: 'camera' } : v === 'point' ? { kind: 'point', position: [0, 2, 4] } : { kind: 'object', id: v }
   props.studio.patch({ gaze: target })
+}
+function screen(ev: Event) {
+  const v = (ev.target as HTMLSelectElement).value
+  if (v !== 'image') props.studio.patch({ screen: v })
+}
+async function screenFile(ev: Event) {
+  const input = ev.target as HTMLInputElement,
+    file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  if (file.size > 400_000) {
+    message.value = 'Screen image must stay under 400 kB (it is stored in the project)'
+    return
+  }
+  const url = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result))
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(file)
+  })
+  props.studio.patch({ screen: url })
 }
 function deg(r: number) {
   return Math.round((r * 180) / Math.PI)
@@ -84,7 +109,14 @@ function rad(d: number) {
           <label v-for="(a, i) in ['X', 'Y', 'Z']" :key="a">{{ a }}<input type="number" step="0.05" :value="event.position[i]" @change="studio.updateEvent(event.id, { position: axis(event.position, i, $event) })" /></label>
         </div>
       </div>
-      <p v-else-if="event.type === 'camera'" class="note">Camera pose · fov {{ event.pose.fov }}. Select Camera and move the view, then re-record a key at this time to replace it.</p>
+      <template v-else-if="event.type === 'camera'">
+        <label class="field-col">
+          Shot label
+          <input :value="event.label ?? ''" placeholder="Close-up · Lew" @change="studio.updateEvent(event.id, { label: ($event.target as HTMLInputElement).value || undefined })" />
+        </label>
+        <label class="field-row check">Cut (no easing into this key) <input type="checkbox" :checked="!!event.cut" @change="studio.updateEvent(event.id, { cut: ($event.target as HTMLInputElement).checked || undefined })" /></label>
+        <p class="note">fov {{ event.pose.fov }}. Select Camera, move the view, then re-record a key at this time to replace it.</p>
+      </template>
       <p v-else class="note">Gaze → {{ event.target.kind === 'object' ? event.target.id : event.target.kind }}</p>
     </template>
     <template v-else-if="character">
@@ -92,7 +124,7 @@ function rad(d: number) {
         <span class="dot big" :style="{ background: character.color }" />
         <div>
           <input class="inline-name" :value="character.name" aria-label="Character name" @change="studio.patch({ name: ($event.target as HTMLInputElement).value })" />
-          <small>{{ character.kind }} · {{ action ? ACTION_LABELS[action.type === 'action' ? action.action : 'nod'] : 'idle' }}</small>
+          <small>{{ CHARACTERS[character.kind].personality.summary }} · {{ action ? ACTION_LABELS[action.type === 'action' ? action.action : 'nod'] : 'idle' }}</small>
         </div>
         <button class="ghost icon-only" title="Remove character" @click="studio.removeSelected()"><Icon name="trash" /></button>
       </div>
@@ -131,6 +163,19 @@ function rad(d: number) {
         <div><strong>{{ prop.id }}</strong><small>{{ prop.kind }}</small></div>
         <button class="ghost icon-only" title="Remove prop" @click="studio.removeSelected()"><Icon name="trash" /></button>
       </div>
+      <template v-if="SCREEN_PROPS.includes(prop.kind)">
+        <label class="field-col">
+          Screen
+          <select :value="screenValue" @change="screen">
+            <option v-for="s in SCREEN_IDS" :key="s" :value="s">{{ SCREEN_LABELS[s] }}</option>
+            <option value="image">Custom image…</option>
+          </select>
+        </label>
+        <label class="field-col">
+          Screenshot (PNG/JPEG, under 400 kB)
+          <input type="file" accept="image/png,image/jpeg,image/webp" @change="screenFile" />
+        </label>
+      </template>
       <h4>Transform</h4>
       <div class="vec">
         <label v-for="(a, i) in ['X', 'Y', 'Z']" :key="a">{{ a }}<input type="number" step="0.05" :value="prop.position[i]" @change="studio.patch({ position: axis(prop.position, i, $event) })" /></label>
@@ -166,7 +211,7 @@ function rad(d: number) {
       </div>
       <label class="field-row">Field of view <input type="range" min="12" max="100" step="1" :value="camera.fov" @input="studio.setCamera({ ...camera, fov: num($event, 40) })" /><span class="unit">{{ camera.fov.toFixed(0) }}°</span></label>
       <button class="ghost wide accent" @click="studio.cameraKey()"><Icon name="key" /> Record camera key at {{ time.toFixed(2) }}s</button>
-      <p class="note">Orbit, pan and zoom in the viewport, frame a preset, then record. Keys interpolate with an ease-in-out.</p>
+      <p class="note">Shots in the script are the normal way to move the camera. Orbit, frame a preset and record a key only to fix one moment.</p>
     </template>
     <template v-else-if="selected === 'environment'">
       <div class="object-head">
@@ -180,8 +225,8 @@ function rad(d: number) {
       <h4>Scene</h4>
       <label class="field-row">Duration <input type="number" min="0.5" max="300" step="0.5" :value="scene.duration" @change="studio.setDuration(num($event, 10))" /><span class="unit">s</span></label>
       <label class="field-row">Frame rate <input type="number" min="12" max="60" step="1" :value="scene.fps" @change="studio.edit((c) => c.setFps(Math.max(12, Math.min(60, num($event, 60)))))" /><span class="unit">fps</span></label>
-      <p class="note">Gaze anchors here: {{ Object.keys(env.anchors).join(', ') }}.</p>
+      <p class="note">Marks: {{ Object.keys(env.marks).join(', ') }}. Gaze anchors: {{ Object.keys(env.anchors).join(', ') }}.</p>
     </template>
-    <p v-else class="empty">Select something in the viewport or the outliner.</p>
+    <p v-else class="empty">Select something in the viewport or the scene tree.</p>
   </div>
 </template>

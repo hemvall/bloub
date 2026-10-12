@@ -3,7 +3,7 @@ import type { CharacterData } from '../scene/model'
 import type { Gaze } from '../animation/gaze'
 import type { FaceParams } from '../animation/expressions'
 import type { ActionPose } from '../animation/actions'
-import { idleAt } from '../animation/idle'
+import { DEFAULT_IDLE, idleAt, type IdleProfile } from '../animation/idle'
 import { flat, ink, INK, oval, toon } from '../engine/toon'
 import { disposeTree } from '../engine/geometry'
 /**
@@ -35,6 +35,7 @@ export interface CharacterFrame {
   face: FaceParams
   action: ActionPose
   speaking: boolean
+  idle?: IdleProfile
 }
 export class CharacterRig {
   readonly root = new T.Group()
@@ -88,7 +89,8 @@ export class CharacterRig {
   }
   update(frame: CharacterFrame) {
     const { data, gaze, face, action } = frame
-    const idle = idleAt(frame.time, frame.seed)
+    const profile = frame.idle ?? DEFAULT_IDLE
+    const idle = idleAt(frame.time, frame.seed, profile)
     const m = this.metrics
     this.root.position.set(...data.position)
     this.root.rotation.set(...data.rotation)
@@ -97,10 +99,10 @@ export class CharacterRig {
     const squash = action.squash
     this.body.position.set(idle.shift, action.bodyY, 0)
     this.body.scale.set(1 - idle.breath * 0.5 - squash * 0.5, 1 + idle.breath + squash, 1 - squash * 0.4)
-    this.body.rotation.set(action.bodyPitch, 0, idle.sway)
+    this.body.rotation.set(action.bodyPitch + profile.posture, 0, idle.sway)
     this.head.position.y = m.headHeight
     this.head.rotation.set(
-      -gaze.headPitch + idle.headPitch + action.headPitch,
+      -gaze.headPitch + idle.headPitch + action.headPitch + profile.headDrop,
       gaze.headYaw + idle.headYaw + action.headYaw,
       idle.headRoll + action.headRoll
     )

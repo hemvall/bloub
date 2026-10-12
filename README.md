@@ -1,11 +1,14 @@
 # bloub
 
-**Scene Studio** lives at `/studio` or `/#studio`: a browser-native Three.js studio for short
-character clips. Three illustrated characters (Kit the cat, Pip the bird, Bo the bear), three
-environments (night bar, rooftop at dusk, studio stage), a keyframe timeline with dialogue and
-gestures, a chat director that turns a sentence into a scene (Claude, or an offline parser), and
-MP4 export at reel resolution straight from the browser. See the
-[Scene Studio guide](docs/scene-studio.md). The original SVG avatar editor remains at `/`.
+**Scene Studio** lives at `/studio` or `/#studio`: a content engine for short vertical videos
+about AI agents and automation, built around Lew, the recurring main character. A project is a
+script (lines, shots, stage directions) that compiles deterministically into a 3D scene: cuts,
+gaze, listening, subtitles with the spoken word highlighted, then a 1080x1920 MP4 straight from
+the browser. Six sets (Lew's office at night, a meeting room, an abstract AI lab, and the
+original bar, rooftop and stage), six characters (Lew, a CEO and a developer archetype, plus Kit,
+Pip and Bo), templates, a library, a chat director, and an optional Claude generator that turns a
+brief into a whole project. See the [Scene Studio guide](docs/scene-studio.md).
+The original SVG avatar editor remains at `/`.
 
 An SVG recreation of the x.ai bot avatar: **one filled black shape** that morphs
 between 14 states, **two white shapes** for the eyes that morph independently, on

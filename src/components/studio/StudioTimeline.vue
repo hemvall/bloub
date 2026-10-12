@@ -63,7 +63,7 @@ function label(e: TimelineEvent) {
     case 'gaze':
       return e.target.kind === 'object' ? e.target.id : e.target.kind
     case 'camera':
-      return `fov ${e.pose.fov.toFixed(0)}`
+      return `${e.cut ? 'cut · ' : ''}${e.label ?? `fov ${e.pose.fov.toFixed(0)}`}`
     case 'position':
       return e.position.map((v) => v.toFixed(1)).join(', ')
   }
@@ -100,7 +100,7 @@ const characterColor = (e: TimelineEvent) => ('character' in e ? scene.value.cha
             v-for="e in scene.timeline.filter((e) => e.type === t)"
             :key="e.id"
             class="key"
-            :class="[t, { block: !!width(e), selected: selectedEvent === e.id }]"
+            :class="[t, { block: !!width(e), selected: selectedEvent === e.id, cut: e.type === 'camera' && e.cut }]"
             :style="{ left: pct(e.time), width: width(e), '--c': characterColor(e) }"
             :title="`${LABELS[t]} · ${e.time.toFixed(2)}s · ${label(e)}`"
             :aria-label="`${LABELS[t]} key at ${e.time.toFixed(2)} seconds`"

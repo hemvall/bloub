@@ -1,11 +1,48 @@
 /** The scene document: the single source of truth. Everything on screen is a function of it and a time `t`. */
 export type Vec3 = [number, number, number]
 export type Aspect = '16:9' | '9:16' | '1:1'
-export type EnvironmentId = 'night-bar' | 'rooftop' | 'stage'
-export type CharacterKind = 'kit' | 'pip' | 'bo'
-export type Expression = 'neutral' | 'tired' | 'curious' | 'happy' | 'sad' | 'surprised' | 'annoyed'
-export type ActionId = 'sigh' | 'nod' | 'shake' | 'bounce' | 'wave' | 'think' | 'laugh'
-export type PropKind = 'glass' | 'bottle' | 'cup' | 'plant' | 'book' | 'lamp'
+export type EnvironmentId = 'night-bar' | 'rooftop' | 'stage' | 'office-night' | 'meeting-room' | 'ai-lab'
+export type CharacterKind = 'kit' | 'pip' | 'bo' | 'lew' | 'ceo' | 'dev'
+export type Expression =
+  | 'neutral'
+  | 'tired'
+  | 'curious'
+  | 'happy'
+  | 'sad'
+  | 'surprised'
+  | 'annoyed'
+  | 'confused'
+  | 'deadpan'
+  | 'smug'
+export type ActionId =
+  | 'sigh'
+  | 'nod'
+  | 'shake'
+  | 'bounce'
+  | 'wave'
+  | 'think'
+  | 'laugh'
+  | 'listen'
+  | 'blink'
+  | 'doubleBlink'
+  | 'emphasis'
+  | 'leanIn'
+  | 'leanBack'
+  | 'tilt'
+export type PropKind =
+  | 'glass'
+  | 'bottle'
+  | 'cup'
+  | 'plant'
+  | 'book'
+  | 'lamp'
+  | 'laptop'
+  | 'phone'
+  | 'monitor'
+  | 'coffee'
+  | 'whiteboard'
+  | 'documents'
+  | 'server'
 export type GazeTarget =
   | { kind: 'camera' }
   | { kind: 'object'; id: string }
@@ -33,6 +70,8 @@ export interface PropData {
   rotation: Vec3
   scale: number
   color: string
+  /** Screen content for props with a display: a painter id (`SCREEN_IDS`) or a `data:image/...` URL. */
+  screen?: string
 }
 export interface LightData {
   id: string
@@ -48,13 +87,33 @@ export interface EnvironmentSettings {
   /** Bloom strength; 0 skips the post-processing pass entirely. */
   bloom: number
 }
+/** Short-form subtitle style. Sizes are fractions of the frame's short side; positions fractions of its height. */
+export interface SubtitleStyle {
+  enabled: boolean
+  /** 'words' highlights the spoken word in chunks; 'caption' is a classic box with the speaker's name. */
+  mode: 'words' | 'caption'
+  font: string
+  weight: number
+  size: number
+  color: string
+  highlight: string
+  stroke: string
+  /** Baseline of the subtitle block in portrait and landscape frames. */
+  positionPortrait: number
+  positionLandscape: number
+  wordsPerLine: number
+  maxWidth: number
+  uppercase: boolean
+  entrance: 'pop' | 'fade' | 'none'
+  speakerLabel: boolean
+}
 interface EventBase {
   /** Stable id: the timeline is edited by id, never by index. */
   id: string
   time: number
 }
 export type TimelineEvent =
-  | (EventBase & { type: 'camera'; pose: CameraPose })
+  | (EventBase & { type: 'camera'; pose: CameraPose; cut?: boolean; label?: string })
   | (EventBase & { type: 'position'; character: string; position: Vec3 })
   | (EventBase & { type: 'gaze'; character: string; target: GazeTarget })
   | (EventBase & { type: 'expression'; character: string; expression: Expression })
@@ -62,7 +121,7 @@ export type TimelineEvent =
   | (EventBase & { type: 'action'; character: string; action: ActionId })
 export type EventType = TimelineEvent['type']
 export interface SceneData {
-  version: 2
+  version: 3
   name: string
   duration: number
   fps: number
@@ -73,11 +132,52 @@ export interface SceneData {
   props: PropData[]
   lights: LightData[]
   timeline: TimelineEvent[]
+  subtitles: SubtitleStyle
 }
 export const ASPECTS: Aspect[] = ['16:9', '9:16', '1:1']
-export const EXPRESSIONS: Expression[] = ['neutral', 'tired', 'curious', 'happy', 'sad', 'surprised', 'annoyed']
-export const ACTIONS: ActionId[] = ['sigh', 'nod', 'shake', 'bounce', 'wave', 'think', 'laugh']
-export const PROP_KINDS: PropKind[] = ['glass', 'bottle', 'cup', 'plant', 'book', 'lamp']
+export const EXPRESSIONS: Expression[] = [
+  'neutral',
+  'tired',
+  'curious',
+  'happy',
+  'sad',
+  'surprised',
+  'annoyed',
+  'confused',
+  'deadpan',
+  'smug'
+]
+export const ACTIONS: ActionId[] = [
+  'sigh',
+  'nod',
+  'shake',
+  'bounce',
+  'wave',
+  'think',
+  'laugh',
+  'listen',
+  'blink',
+  'doubleBlink',
+  'emphasis',
+  'leanIn',
+  'leanBack',
+  'tilt'
+]
+export const PROP_KINDS: PropKind[] = [
+  'glass',
+  'bottle',
+  'cup',
+  'plant',
+  'book',
+  'lamp',
+  'laptop',
+  'phone',
+  'monitor',
+  'coffee',
+  'whiteboard',
+  'documents',
+  'server'
+]
 export const EVENT_TYPES: EventType[] = ['camera', 'position', 'gaze', 'expression', 'dialogue', 'action']
 /** Export sizes per format; 1080 on the short side is the short-form standard. */
 export const OUTPUT_SIZE: Record<Aspect, [number, number]> = {

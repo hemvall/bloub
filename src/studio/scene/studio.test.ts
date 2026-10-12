@@ -36,14 +36,15 @@ describe('scene document', () => {
       timeline: [{ type: 'gaze', time: 1, character: 'kit', target: { kind: 'camera' } }]
     }
     const scene = parseScene(JSON.stringify(v1))
-    expect(scene.version).toBe(2)
+    expect(scene.version).toBe(3)
+    expect(scene.subtitles.mode).toBe('words')
     expect(scene.characters[0]!.kind).toBe('kit')
     expect(scene.environment.bloom).toBeGreaterThan(0)
     expect(scene.timeline[0]!.id).toBeTruthy()
   })
   it.each([
     (s: ReturnType<typeof lateNightBar>) => {
-      s.version = 3 as 2
+      s.version = 4 as 3
     },
     (s: ReturnType<typeof lateNightBar>) => {
       s.characters[0]!.position = [0, 0] as never

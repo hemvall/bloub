@@ -1,11 +1,12 @@
 import type { SceneData } from './model'
 import { SceneCommands } from './commands'
 import { ENVIRONMENTS } from '../environments/catalog'
+import { LEW_SUBTITLES } from '../subtitles/style'
 /** Example scenes are built through the commands, exactly as the chat or an agent would. */
 export function emptyScene(name = 'Untitled scene', environment: SceneData['environment']['id'] = 'stage'): SceneData {
   const def = ENVIRONMENTS[environment]
   return {
-    version: 2,
+    version: 3,
     name,
     duration: 10,
     fps: 60,
@@ -15,7 +16,8 @@ export function emptyScene(name = 'Untitled scene', environment: SceneData['envi
     characters: [],
     props: [],
     lights: [],
-    timeline: []
+    timeline: [],
+    subtitles: structuredClone(LEW_SUBTITLES)
   }
 }
 export function lateNightBar(): SceneData {

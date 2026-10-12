@@ -19,7 +19,10 @@ export const FACES: Record<Expression, FaceParams> = {
   happy: { lid: 0.22, lidTilt: -0.22, smile: 1, open: 0.12, pupil: 1.05, ears: 0.2 },
   sad: { lid: 0.3, lidTilt: -0.4, smile: -0.8, open: 0, pupil: 1.1, ears: -0.55 },
   surprised: { lid: -0.08, lidTilt: -0.05, smile: 0, open: 0.75, pupil: 0.8, ears: 0.5 },
-  annoyed: { lid: 0.34, lidTilt: 0.42, smile: -0.55, open: 0, pupil: 0.9, ears: -0.15 }
+  annoyed: { lid: 0.34, lidTilt: 0.42, smile: -0.55, open: 0, pupil: 0.9, ears: -0.15 },
+  confused: { lid: 0.16, lidTilt: 0.16, smile: -0.15, open: 0.16, pupil: 1.1, ears: 0.15 },
+  deadpan: { lid: 0.38, lidTilt: 0.05, smile: -0.05, open: 0, pupil: 0.95, ears: -0.1 },
+  smug: { lid: 0.3, lidTilt: 0.22, smile: 0.55, open: 0, pupil: 0.9, ears: 0.1 }
 }
 export function mixFaces(a: FaceParams, b: FaceParams, t: number): FaceParams {
   const m = (x: number, y: number) => x + (y - x) * t

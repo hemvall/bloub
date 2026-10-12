@@ -22,7 +22,14 @@ export const ACTION_DURATION: Record<ActionId, number> = {
   bounce: 0.75,
   wave: 1.6,
   think: 2.2,
-  laugh: 1.4
+  laugh: 1.4,
+  listen: 0.7,
+  blink: 0.32,
+  doubleBlink: 0.6,
+  emphasis: 0.5,
+  leanIn: 2.4,
+  leanBack: 2.4,
+  tilt: 1.6
 }
 export const ACTION_LABELS: Record<ActionId, string> = {
   sigh: 'Sigh',
@@ -31,7 +38,14 @@ export const ACTION_LABELS: Record<ActionId, string> = {
   bounce: 'Bounce',
   wave: 'Wave',
   think: 'Think',
-  laugh: 'Laugh'
+  laugh: 'Laugh',
+  listen: 'Listen',
+  blink: 'Blink',
+  doubleBlink: 'Double blink',
+  emphasis: 'Emphasis',
+  leanIn: 'Lean in',
+  leanBack: 'Lean back',
+  tilt: 'Head tilt'
 }
 const ZERO: ActionPose = {
   headPitch: 0,
@@ -50,6 +64,8 @@ const ZERO: ActionPose = {
 }
 const ease = (u: number) => u * u * (3 - 2 * u)
 const bump = (u: number) => Math.sin(Math.PI * Math.min(1, Math.max(0, u))) ** 2
+/** Ease in over `edge`, hold, ease out over `edge`. */
+const hold = (u: number, edge: number) => ease(Math.min(1, u / edge)) * ease(Math.min(1, (1 - u) / edge))
 function poseOf(action: ActionId, u: number): Partial<ActionPose> {
   switch (action) {
     case 'sigh': {
@@ -78,7 +94,7 @@ function poseOf(action: ActionId, u: number): Partial<ActionPose> {
       }
     }
     case 'wave': {
-      const up = ease(Math.min(1, u / 0.2)) * ease(Math.min(1, (1 - u) / 0.2))
+      const up = hold(u, 0.2)
       return {
         armRaise: up,
         armSwing: Math.sin(u * Math.PI * 5) * 0.5 * up,
@@ -87,7 +103,7 @@ function poseOf(action: ActionId, u: number): Partial<ActionPose> {
       }
     }
     case 'think': {
-      const in_ = ease(Math.min(1, u / 0.25)) * ease(Math.min(1, (1 - u) / 0.25))
+      const in_ = hold(u, 0.25)
       return {
         headRoll: 0.16 * in_,
         headPitch: -0.08 * in_,
@@ -107,6 +123,27 @@ function poseOf(action: ActionId, u: number): Partial<ActionPose> {
         smile: 1 * env,
         ears: 0.3 * env
       }
+    }
+    // Conversational micro-gestures: small enough to layer under a line without reading as a beat.
+    case 'listen':
+      return { headPitch: Math.sin(u * Math.PI * 2) * 0.07 * bump(u), bodyY: -0.005 * bump(u) }
+    case 'blink':
+      return { lid: bump(u) }
+    case 'doubleBlink':
+      return { lid: Math.sin(u * Math.PI * 2) ** 2 }
+    case 'emphasis':
+      return { headPitch: 0.09 * bump(u), bodyY: -0.012 * bump(u) }
+    case 'leanIn': {
+      const env = hold(u, 0.18)
+      return { bodyPitch: 0.16 * env, headPitch: -0.05 * env, bodyY: -0.02 * env }
+    }
+    case 'leanBack': {
+      const env = hold(u, 0.18)
+      return { bodyPitch: -0.12 * env, headPitch: 0.06 * env, lid: 0.1 * env }
+    }
+    case 'tilt': {
+      const env = hold(u, 0.22)
+      return { headRoll: 0.2 * env, headPitch: -0.04 * env, lid: 0.12 * env, ears: 0.3 * env }
     }
   }
 }

@@ -15,30 +15,54 @@ import {
 import { SceneCommands } from '@/studio/scene/commands'
 import { cameraAt, characterAt, readingTime } from '@/studio/timeline/evaluate'
 import { parseScene, serializeScene, validateScene } from '@/studio/serialization/scene'
-import { emptyScene, EXAMPLES } from '@/studio/scene/examples'
 import { presetPose, type PresetName } from '@/studio/camera/presets'
 import { subjectOf } from '@/studio/timeline/evaluate'
 import { download, ExportCancelled, renderStill, renderVideo, slug } from '@/studio/export/video'
-import { loadProject, newEntryId, saveProject, type ProjectEntry } from './useProject'
+import { ContentStudio } from '@/studio/content/api'
+import { newProjectId, parseProject, projectFromScene, serializeProject, validateProject, type ContentProject, type ProjectStatus } from '@/studio/content/project'
+import { generateProject } from '@/studio/content/generate'
+import { OUTPUT_PRESETS, renderPlan, type OutputFormat } from '@/studio/render/presets'
+import { loadLibrary, saveLibrary } from './useProject'
+import { useClaudeSettings } from './useDirector'
 export type TransformMode = 'translate' | 'rotate' | 'scale'
 export type Panel = 'director' | 'inspector'
+export type LeftPanel = 'script' | 'scene'
+export type View = 'library' | 'studio'
 export interface ExportState {
   running: boolean
   done: number
   total: number
   label: string
 }
-/** All studio state lives here; components are views on it and the engine is its renderer. */
+/**
+ * All studio state lives here; components are views on it and the engine is
+ * its renderer. Project-level edits go through `ContentStudio`, scene-level
+ * edits through `SceneCommands`; both land in the active project.
+ */
 export function useStudioDocument() {
-  const project = loadProject()
-  const entries = shallowRef<ProjectEntry[]>(project.entries)
-  const linked = new URLSearchParams(window.location.hash.replace(/^#/, '')).get('scene')
-  const activeId = ref(entries.value.some((e) => e.id === linked) ? linked! : project.active)
-  const scene = shallowRef<SceneData>(entries.value.find((e) => e.id === activeId.value)!.scene)
+  const library = loadLibrary()
+  const projects = shallowRef<ContentProject[]>(library.projects)
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+  // Deep links: #project=<id>, #template=<id> (a fresh project), and t=<seconds> to open at that moment.
+  const templateLink = hash.get('template')
+  if (templateLink) {
+    try {
+      projects.value = [ContentStudio.fromTemplate(templateLink).project, ...projects.value]
+    } catch {
+      /* unknown template: the library opens instead */
+    }
+  }
+  const linked = templateLink && projects.value[0] ? projects.value[0].id : (hash.get('project') ?? hash.get('scene'))
+  const initialTime = Math.max(0, Number(hash.get('t')) || 0)
+  const activeId = ref(projects.value.some((p) => p.id === linked) ? linked! : library.active)
+  const view = ref<View>(linked && projects.value.some((p) => p.id === linked) ? 'studio' : 'library')
+  const project = shallowRef<ContentProject>(projects.value.find((p) => p.id === activeId.value)!)
+  const scene = shallowRef<SceneData>(project.value.scene)
   const viewport = ref<InstanceType<typeof StudioViewport>>()
   const selected = ref<string>(scene.value.characters[0]?.id ?? 'camera')
   const selectedEvent = ref<string | null>(null)
-  const panel = ref<Panel>('director')
+  const panel = ref<Panel>('inspector')
+  const leftPanel = ref<LeftPanel>('script')
   const time = ref(0),
     playing = ref(false),
     fps = ref(0),
@@ -50,25 +74,39 @@ export function useStudioDocument() {
     json = ref('')
   const fileInput = ref<HTMLInputElement>()
   const exporting = ref<ExportState>({ running: false, done: 0, total: 0, label: '' })
-  let exportAbort: AbortController | undefined
+  const generating = ref(false)
+  const scriptWarnings = ref<string[]>([])
+  const claude = useClaudeSettings()
+  let exportAbort: AbortController | undefined,
+    generateAbort: AbortController | undefined
   const liveScene = computed(() => ({
     ...scene.value,
     characters: scene.value.characters.map((c) => characterAt(scene.value, c, time.value))
   }))
   const selectedCharacter = computed(() => scene.value.characters.find((c) => c.id === selected.value))
   const event = computed(() => scene.value.timeline.find((e) => e.id === selectedEvent.value))
+  const plan = computed(() => renderPlan(project.value.format, scene.value.duration))
+  const canGenerate = computed(() => !!claude.value.apiKey)
   function bindViewport(instance: unknown) {
     viewport.value = instance as InstanceType<typeof StudioViewport> | undefined
   }
-  function adopt(next: SceneData, note = '') {
-    scene.value = next
-    entries.value = entries.value.map((e) => (e.id === activeId.value ? { ...e, scene: next } : e))
-    if (!next.characters.some((c) => c.id === selected.value) && !next.props.some((p) => p.id === selected.value) && !next.lights.some((l) => l.id === selected.value) && !['camera', 'environment'].includes(selected.value))
-      selected.value = next.characters[0]?.id ?? 'camera'
-    if (selectedEvent.value && !next.timeline.some((e) => e.id === selectedEvent.value)) selectedEvent.value = null
-    if (time.value > next.duration) seek(next.duration)
+  /** Stores a new version of the active project and keeps the selection coherent with it. */
+  function adoptProject(next: ContentProject, note = '') {
+    next.metadata.updatedAt = new Date().toISOString()
+    project.value = next
+    scene.value = next.scene
+    projects.value = projects.value.map((p) => (p.id === next.id ? next : p))
+    const s = next.scene
+    if (!s.characters.some((c) => c.id === selected.value) && !s.props.some((p) => p.id === selected.value) && !s.lights.some((l) => l.id === selected.value) && !['camera', 'environment'].includes(selected.value))
+      selected.value = s.characters[0]?.id ?? 'camera'
+    if (selectedEvent.value && !s.timeline.some((e) => e.id === selectedEvent.value)) selectedEvent.value = null
+    if (time.value > s.duration) seek(s.duration)
     message.value = note
   }
+  function adopt(next: SceneData, note = '') {
+    adoptProject({ ...project.value, scene: next }, note)
+  }
+  /** Scene-level edit through the commands, on a copy, validated before it lands. */
   function edit(fn: (commands: SceneCommands, document: SceneData) => void, note = '') {
     try {
       const copy = structuredClone(scene.value)
@@ -79,6 +117,69 @@ export function useStudioDocument() {
       message.value = e instanceof Error ? e.message : String(e)
       return false
     }
+  }
+  /** Project-level edit through the content API, same discipline. */
+  function editProject(fn: (studio: ContentStudio) => void, note = '') {
+    try {
+      const studio = new ContentStudio(structuredClone(project.value))
+      fn(studio)
+      adoptProject(validateProject(studio.project), note)
+      return true
+    } catch (e) {
+      message.value = e instanceof Error ? e.message : String(e)
+      return false
+    }
+  }
+  // --- Content ------------------------------------------------------------------
+  function compile() {
+    let warnings: string[] = []
+    const ok = editProject((s) => {
+      warnings = s.compileTimeline().warnings
+    }, 'Timeline compiled from the script')
+    scriptWarnings.value = warnings
+    if (ok) {
+      selected.value = scene.value.characters[0]?.id ?? 'camera'
+      requestAnimationFrame(() => seek(0))
+    }
+    return ok
+  }
+  function applyScriptText(text: string) {
+    let warnings: string[] = []
+    editProject((s) => {
+      warnings = s.setScript(text)
+    })
+    scriptWarnings.value = warnings
+    compile()
+  }
+  function setFormat(format: OutputFormat) {
+    editProject((s) => s.setFormat(format), `${OUTPUT_PRESETS[format].name}`)
+  }
+  function setStatus(status: ProjectStatus) {
+    editProject((s) => s.setStatus(status))
+  }
+  async function generate(prompt: string) {
+    if (!prompt.trim() || generating.value) return
+    if (!claude.value.apiKey) {
+      message.value = 'Add your Anthropic API key (director settings) to generate from a brief; templates work without one.'
+      return
+    }
+    generating.value = true
+    generateAbort = new AbortController()
+    try {
+      const result = await generateProject(prompt, { apiKey: claude.value.apiKey, model: claude.value.model }, generateAbort.signal)
+      result.project.metadata.notes = prompt
+      projects.value = [result.project, ...projects.value]
+      openProject(result.project.id)
+      scriptWarnings.value = result.warnings
+      message.value = result.reply || 'Project generated'
+    } catch (e) {
+      message.value = e instanceof Error ? e.message : String(e)
+    } finally {
+      generating.value = false
+    }
+  }
+  function cancelGenerate() {
+    generateAbort?.abort()
   }
   // --- Transport --------------------------------------------------------------
   function seek(value: number) {
@@ -236,50 +337,104 @@ export function useStudioDocument() {
     requestAnimationFrame(() => seek(time.value))
   }
   function rename(name: string) {
-    if (name.trim()) edit((c) => c.setName(name.trim()))
+    if (!name.trim()) return
+    editProject((s) => {
+      s.setTitle(name)
+      s.project.scene.name = name.trim()
+    })
   }
-  // --- Project ------------------------------------------------------------------
-  function openScene(id: string) {
-    const entry = entries.value.find((e) => e.id === id)
-    if (!entry || id === activeId.value) return
+  // --- Library ------------------------------------------------------------------
+  function openProject(id: string) {
+    const next = projects.value.find((p) => p.id === id)
+    if (!next) return
     viewport.value?.pause()
     playing.value = false
     activeId.value = id
-    scene.value = entry.scene
-    selected.value = entry.scene.characters[0]?.id ?? 'camera'
+    project.value = next
+    scene.value = next.scene
+    selected.value = next.scene.characters[0]?.id ?? 'camera'
     selectedEvent.value = null
+    scriptWarnings.value = []
+    view.value = 'studio'
     requestAnimationFrame(() => seek(0))
   }
-  function newScene(template?: string) {
-    const example = EXAMPLES.find((x) => x.id === template)
-    const entry = { id: newEntryId(), scene: example ? example.build() : emptyScene() }
-    entries.value = [...entries.value, entry]
-    openScene(entry.id)
-    panel.value = 'director'
+  if (view.value === 'studio') requestAnimationFrame(() => requestAnimationFrame(() => seek(initialTime)))
+  function captureThumbnail() {
+    const engine = viewport.value?.engine()
+    if (!engine || exporting.value.running) return
+    try {
+      const canvas = document.createElement('canvas')
+      const portrait = scene.value.aspect === '9:16'
+      canvas.width = portrait ? 180 : 320
+      canvas.height = portrait ? 320 : 180
+      const capture = engine.capture(canvas.width, canvas.height)
+      try {
+        capture.frame(Math.min(scene.value.duration, scene.value.duration * 0.35), canvas.getContext('2d')!)
+      } finally {
+        capture.end()
+      }
+      const thumbnail = canvas.toDataURL('image/jpeg', 0.7)
+      const next = { ...project.value, metadata: { ...project.value.metadata, thumbnail } }
+      project.value = next
+      projects.value = projects.value.map((p) => (p.id === next.id ? next : p))
+    } catch {
+      /* a thumbnail is a nicety */
+    }
   }
-  function duplicateScene() {
-    const entry = { id: newEntryId(), scene: structuredClone({ ...scene.value, name: `${scene.value.name} copy` }) }
-    entries.value = [...entries.value, entry]
-    openScene(entry.id)
+  function toLibrary() {
+    viewport.value?.pause()
+    playing.value = false
+    captureThumbnail()
+    view.value = 'library'
   }
-  function deleteScene(id: string) {
-    if (entries.value.length <= 1) {
-      message.value = 'A project keeps at least one scene'
+  function addProject(next: ContentProject) {
+    projects.value = [next, ...projects.value]
+    openProject(next.id)
+    leftPanel.value = 'script'
+  }
+  function newProject(templateId?: string) {
+    try {
+      const studio = templateId ? ContentStudio.fromTemplate(templateId) : ContentStudio.create({ cast: ['lew'] })
+      addProject(studio.project)
+    } catch (e) {
+      message.value = e instanceof Error ? e.message : String(e)
+    }
+  }
+  function duplicateProject(id = activeId.value) {
+    const source = projects.value.find((p) => p.id === id)
+    if (!source) return
+    const copy = structuredClone(source)
+    copy.id = newProjectId()
+    copy.title = `${source.title} copy`
+    copy.scene.name = copy.title
+    copy.status = 'draft'
+    copy.metadata = { ...copy.metadata, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), renderedAt: undefined }
+    addProject(copy)
+  }
+  function deleteProject(id: string) {
+    if (projects.value.length <= 1) {
+      message.value = 'The library keeps at least one project'
       return
     }
-    const remaining = entries.value.filter((e) => e.id !== id)
-    entries.value = remaining
-    if (activeId.value === id) openScene(remaining[0]!.id)
+    projects.value = projects.value.filter((p) => p.id !== id)
+    if (activeId.value === id) {
+      const next = projects.value[0]!
+      activeId.value = next.id
+      project.value = next
+      scene.value = next.scene
+    }
   }
   // --- Files --------------------------------------------------------------------
+  /** Imports a project, or a bare scene wrapped as a script-less project. */
   function load(text: string) {
     try {
-      const parsed = parseScene(text)
+      const parsed = JSON.parse(text) as { version?: unknown }
+      const next = parsed.version === 1 ? parseProject(text) : projectFromScene(parseScene(text))
+      next.id = newProjectId()
       viewport.value?.pause()
-      adopt(parsed, 'Scene imported')
-      selected.value = parsed.characters[0]?.id ?? 'camera'
+      addProject(next)
       jsonOpen.value = false
-      requestAnimationFrame(() => seek(0))
+      message.value = 'Project imported'
     } catch (e) {
       message.value = `Import failed: ${e instanceof Error ? e.message : String(e)}`
     }
@@ -288,16 +443,19 @@ export function useStudioDocument() {
     const input = ev.target as HTMLInputElement,
       file = input.files?.[0]
     if (file) {
-      if (file.size > 2_000_000) message.value = 'Scene file exceeds 2 MB'
+      if (file.size > 3_000_000) message.value = 'File exceeds 3 MB'
       else load(await file.text())
     }
     input.value = ''
   }
   function exportJSON() {
-    download(new Blob([serializeScene(scene.value)], { type: 'application/json' }), `${slug(scene.value.name)}.json`)
+    download(new Blob([serializeProject(project.value)], { type: 'application/json' }), `${slug(project.value.title)}.lew.json`)
+  }
+  function exportSceneJSON() {
+    download(new Blob([serializeScene(scene.value)], { type: 'application/json' }), `${slug(scene.value.name)}.scene.json`)
   }
   function showJSON() {
-    json.value = serializeScene(scene.value)
+    json.value = serializeProject(project.value)
     jsonOpen.value = true
   }
   async function exportPNG() {
@@ -312,20 +470,22 @@ export function useStudioDocument() {
       message.value = `PNG export failed: ${e instanceof Error ? e.message : String(e)}`
     }
   }
-  async function exportMP4() {
+  /** Final render: deterministic frames at the format's preset, burned-in subtitles, no audio track yet. */
+  async function renderReel(format: OutputFormat = project.value.format) {
     const engine = viewport.value?.engine()
     if (!engine || exporting.value.running) return
+    if (format !== project.value.format) setFormat(format)
     viewport.value?.pause()
     playing.value = false
     exportAbort = new AbortController()
-    const [w, h] = OUTPUT_SIZE[scene.value.aspect]
-    exporting.value = { running: true, done: 0, total: Math.round(scene.value.duration * scene.value.fps), label: `${w}×${h} · ${scene.value.fps} fps` }
+    const preset = OUTPUT_PRESETS[format]
+    exporting.value = { running: true, done: 0, total: Math.round(scene.value.duration * scene.value.fps), label: `${preset.name} · ${preset.width}×${preset.height} · ${scene.value.fps} fps · silent` }
     try {
       const blob = await renderVideo(engine, scene.value, (p) => (exporting.value = { ...exporting.value, ...p }), exportAbort.signal)
-      download(blob, `${slug(scene.value.name)}.mp4`)
-      message.value = `MP4 saved · ${(blob.size / 1e6).toFixed(1)} MB`
+      download(blob, `${slug(project.value.title)}-${format}.mp4`)
+      editProject((s) => s.setStatus('rendered'), `MP4 saved · ${(blob.size / 1e6).toFixed(1)} MB`)
     } catch (e) {
-      message.value = e instanceof ExportCancelled ? 'Export cancelled' : `Video export failed: ${e instanceof Error ? e.message : String(e)}`
+      message.value = e instanceof ExportCancelled ? 'Render cancelled' : `Render failed: ${e instanceof Error ? e.message : String(e)}`
     } finally {
       exporting.value = { ...exporting.value, running: false }
       requestAnimationFrame(() => seek(time.value))
@@ -334,15 +494,10 @@ export function useStudioDocument() {
   function cancelExport() {
     exportAbort?.abort()
   }
-  function reset() {
-    const example = EXAMPLES.find((x) => `example-${x.id}` === activeId.value)
-    adopt(example ? example.build() : emptyScene(scene.value.name, scene.value.environment.id), 'Scene reset')
-    requestAnimationFrame(() => seek(0))
-  }
   // --- Keyboard -----------------------------------------------------------------
   function keyboard(ev: KeyboardEvent) {
     const target = ev.target as HTMLElement
-    if (target.matches('input, textarea, select, [contenteditable]') || jsonOpen.value || exporting.value.running) return
+    if (view.value !== 'studio' || target.matches('input, textarea, select, [contenteditable]') || jsonOpen.value || exporting.value.running) return
     if (ev.code === 'Space') {
       ev.preventDefault()
       togglePlay()
@@ -360,9 +515,9 @@ export function useStudioDocument() {
   let saveTimer: ReturnType<typeof setTimeout>
   function save() {
     clearTimeout(saveTimer)
-    if (!saveProject(entries.value, activeId.value)) message.value = 'Local autosave unavailable; export JSON to keep your work'
+    if (!saveLibrary(projects.value, activeId.value)) message.value = 'Local autosave unavailable; export the project JSON to keep your work'
   }
-  watch([entries, activeId], () => {
+  watch([projects, activeId], () => {
     clearTimeout(saveTimer)
     saveTimer = setTimeout(save, 300)
   })
@@ -376,8 +531,10 @@ export function useStudioDocument() {
     window.removeEventListener('pagehide', save)
   })
   return {
-    entries,
+    projects,
     activeId,
+    project,
+    view,
     scene,
     liveScene,
     bindViewport,
@@ -386,6 +543,7 @@ export function useStudioDocument() {
     selectedCharacter,
     event,
     panel,
+    leftPanel,
     time,
     playing,
     fps,
@@ -397,8 +555,21 @@ export function useStudioDocument() {
     json,
     fileInput,
     exporting,
+    generating,
+    scriptWarnings,
+    plan,
+    canGenerate,
+    claude,
     adopt,
+    adoptProject,
     edit,
+    editProject,
+    compile,
+    applyScriptText,
+    setFormat,
+    setStatus,
+    generate,
+    cancelGenerate,
     seek,
     togglePlay,
     step,
@@ -421,18 +592,21 @@ export function useStudioDocument() {
     setAspect,
     setEnvironment,
     rename,
-    openScene,
-    newScene,
-    duplicateScene,
-    deleteScene,
+    openProject,
+    toLibrary,
+    captureThumbnail,
+    newProject,
+    duplicateProject,
+    deleteProject,
     load,
     importFile,
     exportJSON,
+    exportSceneJSON,
     showJSON,
     exportPNG,
-    exportMP4,
+    renderReel,
     cancelExport,
-    reset
+    OUTPUT_SIZE
   }
 }
 export type StudioDocument = ReturnType<typeof useStudioDocument>

@@ -16,9 +16,9 @@ const { turns, busy, settings, settingsOpen } = director
 const draft = ref('')
 const log = ref<HTMLElement>()
 const SUGGESTIONS = [
-  'Kit sits at the bar. He looks at the window, sighs, then after two seconds looks at the camera and says "Rain again."',
-  'Rooftop at dusk. Pip asks Bo if the city ever sleeps. Bo thinks, then answers. Close-up on Pip at the end.',
-  'Vertical. Kit waves and says "Hi. I was told this would be quick." Then annoyed: "It never is."'
+  'Lew looks at the camera at 2s and says "That is not an agent."',
+  'CEO looks confused after 3 seconds, then nods.',
+  'Close-up on Lew at 9s. No rain.'
 ]
 async function submit() {
   const text = draft.value
@@ -72,7 +72,7 @@ function key(ev: KeyboardEvent) {
     </div>
     <div ref="log" class="director-log">
       <div v-if="!turns.length" class="director-intro">
-        <p><strong>Describe the scene.</strong> Who is on set, where they look, what they say, when the camera moves. Then ask for changes the same way.</p>
+        <p><strong>Adjust the compiled scene in plain words.</strong> Where someone looks, a line, a camera move. The script panel is for rewriting the whole reel; this is for touches.</p>
         <button v-for="s in SUGGESTIONS" :key="s" class="suggestion" @click="draft = s; submit()">{{ s }}</button>
       </div>
       <div v-for="(t, i) in turns" :key="i" class="turn" :class="t.role">

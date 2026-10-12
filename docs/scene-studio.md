@@ -28,25 +28,117 @@ is procedural.
 - **Export**: MP4 at the output size and the scene's fps (60 by default), a PNG of the current
   frame, or the scene JSON. Import validates before replacing the document.
 
+## Content engine
+
+Since v3 the studio is first a **scriptable video engine** for Lew's reels, and only then a 3D
+editor. The unit of work is a **content project** (`src/studio/content/`): title, hook, CTA,
+format, set, cast, dialogue, shots, acting cues, voice config, metadata, and the compiled scene.
+The pipeline is
+
+```
+brief -(Claude, optional)-> project -> script text <-> beats -(compile)-> scene -> preview -> MP4
+```
+
+- **Library** (`/studio`): every project with status (draft / ready / rendered), thumbnail,
+  length, format, cast; duplicate, delete, new from template, import. The command bar
+  ("Describe your video...") calls Claude with the user's own key and gets back a whole project in
+  the script format; without a key it says so and templates work offline. Deep links:
+  `#project=<id>`, `#template=<id>` (a fresh project), `&t=<seconds>`.
+- **Script panel** (left): hook, CTA, format, status, set, cast (role, name, mark), the script
+  text, subtitle style and the render plan. *Apply & compile* parses the text and rebuilds the
+  timeline. The text is a **view** of the structured beats (`printScript` then `parseScript`
+  gives the same beats, tested); the beats are the truth.
+- **Scene panel / Inspector / Timeline / Director**: the adjustment layer on the compiled scene,
+  unchanged in spirit. Hand edits survive until the next compile.
+
+### Script format
+
+```
+[00:00.0]                        time (optional: lines flow one after the other, 0.3 s apart)
+CAMERA: two-shot Lew CEO         wide | medium | close-up | over-shoulder | profile | two-shot
+CEO (confused): "We already have ChatGPT."
+Lew looks at CEO.                stage directions: nods, sighs, looks away, looks confused, leans back...
+CAMERA: close-up Lew slow-push   movements: slow-push | push-in | pull-out | slow-pan
+LEW (smug, 2.4s): "Then you have a chatbot."
+PAUSE 0.5
+```
+
+Speaker labels are cast names or roles, case-insensitive. Durations default to reading speed
+(2.6 words/s, min 1.2 s). Unreadable lines become warnings, never errors.
+
+### What the compiler does (`content/compile.ts`)
+
+Deterministic: the same project gives byte-identical scenes (event ids are renumbered). It
+places the set's **dressing** props (the office monitor shows the Lew workspace, the laptop an
+agent workflow), seats the cast on their **marks**, turns **shots** into camera keys (a `cut`
+flag holds the previous pose until the key; a movement adds a second eased key), lays down the
+dialogue with its emotions, and runs the **conversation pass** (`content/conversation.ts`):
+speakers turn to the listener, listeners turn to the speaker and react according to their
+personality (`subtle` blinks, `medium` gives a small listening nod, `strong` nods), long lines
+get an emphasis beat. Explicit cues always win over the automatic ones.
+
+### Vocabulary that an agent (or Lew) can use
+
+`ContentStudio` (`content/api.ts`) is the whole programmatic surface: `create`, `fromTemplate`,
+`setEnvironment`, `addCharacter`, `addDialogue`, `addShot`, `addAction`, `setExpression`,
+`addProp`, `setScript`, `script()`, `compileTimeline`, `renderFrame`, `toJSON`/`fromJSON`. The
+Vue store calls nothing else at project level. Acting commands (`content/acting.ts`): lookAt,
+lookAway, blink, doubleBlink, nod, shakeHead, sigh, laugh, wave, thinking, confused, annoyed,
+happy, surprised, deadpan, smug, tired, sad, curious, neutral, leanForward, leanBack, emphasis,
+idle. Each maps to an expression, an action window and/or a gaze; adding one is one table entry.
+
+### Shots (`camera/shots.ts`)
+
+A shot is a framing rule, not a position: what must fit in the frame (a height and a width in
+metres) plus a lens. The distance follows from the output aspect, so a portrait close-up steps
+back instead of landing inside Lew's head, and a two-shot fits both bodies whatever the set.
+
+### Characters and sets
+
+`lew` is the brand character (soft squared head, amber fin, half-lidded eyes); `ceo` and `dev`
+are archetypes reused under any role or name (a `client`, an `ops`, a `sales`). Each kind has a
+**personality** (`characters/catalog.ts`) that scales its idle and sets its reaction intensity.
+Sets built for the content: `office-night`, `meeting-room`, `ai-lab`; the original three remain.
+Props with screens (`laptop`, `monitor`, `phone`) show a painted UI (`props/screens.ts`:
+Lew workspace, agent workflow, CRM, chat, terminal, notification) or a custom screenshot stored
+as a data URL in the document.
+
+### Subtitles (`subtitles/`)
+
+Word-level timing is derived from the text (letters weigh, punctuation pauses), words are shown
+in chunks with the spoken one in amber, inside the vertical safe zone. The style lives in the
+scene (`subtitles`), the Lew look is the default, a caption-box style is available. The same
+function draws the viewport and the export.
+
+### Render
+
+`render/presets.ts` lists the targets (Reel, TikTok, Short at 1080x1920 60 fps, Landscape at
+1920x1080) and `renderPlan` says plainly what exists: deterministic frames and burned-in
+subtitles are real; **there is no audio track** because no TTS provider is wired in. The MP4
+is silent, lines are timed by reading speed.
+
 ## Architecture
 
 ```
 src/studio/
-  scene/          model (v2 types), commands, examples
+  content/        project model, script format, acting, conversation pass, compiler, templates, demo, API, Claude generator
+  render/         output presets and the render plan
+  subtitles/      word timing, styles, drawing
+  scene/          model (v3 types), commands, examples
   serialization/  validation + v1 migration, JSON
   timeline/       pure evaluation: cameraAt, characterAt, faceAt, dialogueAt…
   animation/      idle, gaze, expressions, actions — all pure functions of time
-  camera/         presets as framing rules relative to a subject
-  characters/     catalog (no three.js), rig, kit, pip, bo
-  environments/   catalog (no three.js), nightBar, rooftop, stage
-  props/          createProp
+  camera/         presets (editor) and shots (script) as framing rules relative to a subject
+  characters/     catalog with personalities (no three.js), rig, lew, ceo, dev, kit, pip, bo
+  environments/   catalog with marks and dressing (no three.js), officeNight, meetingRoom, aiLab, nightBar, rooftop, stage
+  props/          createProp, screens
   engine/         SceneEngine, toon materials, overlay (captions), geometry helpers
   export/         MP4 (mediabunny, lazy) and PNG
   director/       script format, applyScript, local rules, Claude client, prompt
-src/components/studio/   Vue: SceneStudio, Outliner, Viewport, Inspector, Director, Timeline
+src/components/studio/   Vue: SceneStudio, Library, Script, Outliner, Viewport, Inspector, Director, Timeline
 ```
 
-**The document is the only state.** `SceneData` holds everything: output settings, environment,
+**The scene document is the only rendering state.** `SceneData` holds everything: output settings, environment,
 base camera, characters, props, lights and a timeline of events with stable ids. `SceneCommands`
 is the only writer (`addCharacter`, `setGazeTarget`, `say`, `act`, `cameraPreset`,
 `addCameraKeyframe`, `setEnvironment`, `moveEvent`…). The Vue store (`useStudioDocument`) edits a
@@ -93,9 +185,16 @@ environment (2048²), bloom runs only when the scene's `bloom` is above zero, in
 city windows, shared sphere geometry across every character part, particle buffers updated in
 place. The Anthropic SDK (`~60 kB gzip`) and mediabunny are dynamic imports, loaded on first use.
 
-## What remains for fully automated video
+## What remains for a complete, published reel
 
-Audio and TTS with lip timing, a richer action vocabulary (walks, props in hands), per-scene
-undo/redo, multi-scene renders stitched into one file, server-side batch rendering (the capture
-API is already headless-friendly), and an agent loop that calls `applyScript` directly rather
-than through the chat panel.
+- **Voice.** No TTS; the render is silent and lines are timed by reading speed. Wiring a
+  provider means: `voice.provider`, one audio clip per line, line durations taken from the
+  clips, lip timing from their envelope, and an audio track in `export/video.ts`.
+- **Caption file.** Subtitles are burned in only; an `.srt` from `wordTimings` is a small step.
+- **Headless batch render.** `engine.capture` is already DOM-light; a server renderer needs a
+  WebGL context (Playwright or headless Chrome, which is how the screenshots in this doc were
+  taken).
+- **Publishing.** Nothing talks to Instagram, TikTok or YouTube. Rendered MP4s download.
+- **Agent loop.** `ContentStudio` is callable from anywhere; the chat director still edits the
+  scene, not the project. A director op set over the project (add a line, re-cut, re-time) is the
+  next step for Lew producing its own content.

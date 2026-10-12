@@ -4,11 +4,10 @@ import Icon from './Icon.vue'
 import type { StudioDocument } from './useStudioDocument'
 import { CHARACTERS, CHARACTER_KINDS } from '@/studio/characters/catalog'
 import { ENVIRONMENTS, ENVIRONMENT_IDS } from '@/studio/environments/catalog'
-import { EXAMPLES } from '@/studio/scene/examples'
 import { PROP_KINDS, type EnvironmentId } from '@/studio/scene/model'
 const props = defineProps<{ studio: StudioDocument }>()
-const { entries, activeId, scene, selected } = props.studio
-const menu = ref<'' | 'scene' | 'character' | 'prop'>('')
+const { scene, selected } = props.studio
+const menu = ref<'' | 'character' | 'prop'>('')
 function toggle(name: typeof menu.value) {
   menu.value = menu.value === name ? '' : name
 }
@@ -19,28 +18,8 @@ onMounted(() => window.addEventListener('pointerdown', outside))
 onBeforeUnmount(() => window.removeEventListener('pointerdown', outside))
 </script>
 <template>
-  <aside class="outliner">
-    <h3>
-      Scenes
-      <span class="menu">
-        <button class="ghost icon-only" title="New scene" :aria-expanded="menu === 'scene'" @click="toggle('scene')"><Icon name="plus" /></button>
-        <div v-if="menu === 'scene'" class="menu-list">
-          <button @click="menu = ''; studio.newScene()"><Icon name="scene" /> Empty scene</button>
-          <button v-for="x in EXAMPLES" :key="x.id" @click="menu = ''; studio.newScene(x.id)"><Icon name="sparkle" /> {{ x.name }}</button>
-          <button @click="menu = ''; studio.duplicateScene()"><Icon name="dup" /> Duplicate current</button>
-        </div>
-      </span>
-    </h3>
-    <div class="scene-list">
-      <div v-for="e in entries" :key="e.id" class="row scene-row" :class="{ active: e.id === activeId }">
-        <button class="row-main" @click="studio.openScene(e.id)">
-          <span class="dot" :style="{ background: ENVIRONMENTS[e.scene.environment.id].background }" />
-          <span class="label">{{ e.scene.name }}</span>
-          <small>{{ e.scene.duration.toFixed(0) }}s · {{ e.scene.aspect }}</small>
-        </button>
-        <button class="ghost icon-only row-action" title="Delete scene" @click.stop="studio.deleteScene(e.id)"><Icon name="trash" :size="12" /></button>
-      </div>
-    </div>
+  <div class="scene-tree">
+    <p class="note">The scene is what the script compiled to. Adjust it here; a compile rebuilds it.</p>
     <h3>Environment</h3>
     <select class="field" aria-label="Environment" :value="scene.environment.id" @change="studio.setEnvironment(($event.target as HTMLSelectElement).value as EnvironmentId)">
       <option v-for="id in ENVIRONMENT_IDS" :key="id" :value="id">{{ ENVIRONMENTS[id].name }}</option>
@@ -54,7 +33,7 @@ onBeforeUnmount(() => window.removeEventListener('pointerdown', outside))
     <h3>
       Characters
       <span class="menu">
-        <button class="ghost icon-only" title="Add a character" :aria-expanded="menu === 'character'" @click="toggle('character')"><Icon name="plus" /></button>
+        <button class="ghost icon-only" title="Add a character to the scene only" :aria-expanded="menu === 'character'" @click="toggle('character')"><Icon name="plus" /></button>
         <div v-if="menu === 'character'" class="menu-list">
           <button v-for="k in CHARACTER_KINDS" :key="k" @click="menu = ''; studio.addCharacter(k)">
             <span class="dot" :style="{ background: CHARACTERS[k].color }" /> {{ CHARACTERS[k].name }} <small>{{ k }}</small>
@@ -65,7 +44,7 @@ onBeforeUnmount(() => window.removeEventListener('pointerdown', outside))
     <button v-for="c in scene.characters" :key="c.id" class="row" :class="{ active: selected === c.id }" @click="studio.select(c.id)">
       <span class="dot" :style="{ background: c.color }" /> <span class="label">{{ c.name }}</span> <small>{{ c.kind }}</small>
     </button>
-    <p v-if="!scene.characters.length" class="empty">No one on set. Add a character, or ask the director.</p>
+    <p v-if="!scene.characters.length" class="empty">No one on set. Add a cast member in the script panel.</p>
     <h3>
       Props
       <span class="menu">
@@ -76,7 +55,7 @@ onBeforeUnmount(() => window.removeEventListener('pointerdown', outside))
       </span>
     </h3>
     <button v-for="p in scene.props" :key="p.id" class="row" :class="{ active: selected === p.id }" @click="studio.select(p.id)">
-      <span class="dot" :style="{ background: p.color }" /> <span class="label">{{ p.id }}</span> <small>{{ p.kind }}</small>
+      <span class="dot" :style="{ background: p.color }" /> <span class="label">{{ p.id }}</span> <small>{{ p.screen ? `${p.kind} · ${p.screen.startsWith('data:') ? 'image' : p.screen}` : p.kind }}</small>
     </button>
     <h3>
       Lights
@@ -85,5 +64,5 @@ onBeforeUnmount(() => window.removeEventListener('pointerdown', outside))
     <button v-for="l in scene.lights" :key="l.id" class="row" :class="{ active: selected === l.id }" @click="studio.select(l.id)">
       <Icon name="light" :style="{ color: l.color }" /> <span class="label">{{ l.id }}</span> <small>{{ l.intensity }}</small>
     </button>
-  </aside>
+  </div>
 </template>
