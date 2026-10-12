@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { useRenderLoop } from '@tresjs/core'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import * as THREE from 'three'
 import { CHARACTER_BY_ID } from '@/studio/characters'
 import type { CharacterId } from '@/studio/types'
@@ -17,15 +16,26 @@ const leftEye = ref<THREE.Mesh | null>(null)
 const rightEye = ref<THREE.Mesh | null>(null)
 const character = computed(() => CHARACTER_BY_ID.get(props.character)!)
 
-const { onLoop } = useRenderLoop()
-onLoop(({ elapsed }) => {
-  if (!root.value || !head.value) return
-  root.value.position.y = props.position[1] + Math.sin(elapsed * 1.4) * 0.025
-  head.value.rotation.z = Math.sin(elapsed * 0.7) * 0.018
-  const blink = Math.sin(elapsed * 0.92 + 1.9) > 0.985 ? 0.12 : 1
-  if (leftEye.value) leftEye.value.scale.y = blink
-  if (rightEye.value) rightEye.value.scale.y = blink
-})
+let raf = 0
+let startedAt = 0
+
+function animate(now: number) {
+  if (!startedAt) startedAt = now
+  const elapsed = (now - startedAt) / 1000
+
+  if (root.value && head.value) {
+    root.value.position.y = props.position[1] + Math.sin(elapsed * 1.4) * 0.025
+    head.value.rotation.z = Math.sin(elapsed * 0.7) * 0.018
+    const blink = Math.sin(elapsed * 0.92 + 1.9) > 0.985 ? 0.12 : 1
+    if (leftEye.value) leftEye.value.scale.y = blink
+    if (rightEye.value) rightEye.value.scale.y = blink
+  }
+
+  raf = requestAnimationFrame(animate)
+}
+
+onMounted(() => { raf = requestAnimationFrame(animate) })
+onBeforeUnmount(() => { cancelAnimationFrame(raf) })
 </script>
 
 <template>
