@@ -12,13 +12,18 @@ export const MUSIC_LABELS: Record<MusicTrack, string> = {
   lofi: 'Lo-fi beat (procedural)',
   pulse: 'Synth pulse (procedural)',
   ambient: 'Ambient pad (procedural)',
-  custom: 'Imported file'
+  custom: 'Track (library, search or file)'
 }
 export interface CustomMusic {
   /** Key of the decoded file in the local clip store. */
   hash: string
   name: string
   duration: number
+  /** Attribution to paste in the caption, for tracks that require it. */
+  credit?: string
+  /** Where the bytes came from, so a project opened elsewhere can fetch them again. */
+  url?: string
+  license?: string
 }
 export interface AudioConfig {
   music: { track: MusicTrack; volume: number; custom?: CustomMusic }

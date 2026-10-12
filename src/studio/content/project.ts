@@ -241,6 +241,9 @@ export function validateProject(input: unknown): ContentProject {
     text(c.hash, 'music hash', 80)
     text(c.name, 'music name', 120)
     number(c.duration, 0.1, 3600, 'music duration')
+    if (c.credit !== undefined) text(c.credit, 'music credit', 400)
+    if (c.url !== undefined) text(c.url, 'music url', 600)
+    if (c.license !== undefined) text(c.license, 'music license', 200)
   }
   const ambience = record(audio.ambience, 'ambience')
   if (typeof ambience.enabled !== 'boolean') throw new Error('ambience.enabled must be a boolean')

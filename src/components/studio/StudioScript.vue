@@ -11,10 +11,23 @@ import { SUBTITLE_PRESETS } from '@/studio/subtitles/style'
 import type { CharacterKind, EnvironmentId } from '@/studio/scene/model'
 import { MUSIC_LABELS, MUSIC_TRACKS, TTS_PROVIDERS, type ContentLanguage, type MusicTrack, type TtsProvider } from '@/studio/audio/plan'
 import { DEFAULT_MODELS, OPENAI_VOICES, VOICE_DEFAULTS } from '@/studio/audio/tts'
+import { licenseLabel, MUSIC_LIBRARY } from '@/studio/audio/library'
 const props = defineProps<{ studio: StudioDocument }>()
 const { project, scene, scriptWarnings, plan, audio } = props.studio
-const { keys, voiceProgress, voicedLines, mixing, missing } = audio
+const { keys, voiceProgress, voicedLines, mixing, missing, downloading, archiveItems, archiveFilesOf, searching } = audio
 const musicFile = ref<HTMLInputElement>()
+const shelf = ref('')
+const query = ref('')
+async function copyCredit() {
+  const credit = project.value.audio.music.custom?.credit
+  if (!credit) return
+  try {
+    await navigator.clipboard.writeText(credit)
+    props.studio.message.value = 'Credit copied'
+  } catch {
+    props.studio.message.value = credit
+  }
+}
 function num(ev: Event) {
   return Number((ev.target as HTMLInputElement).value)
 }
@@ -199,8 +212,37 @@ function kindLabel(kind: CharacterKind) {
         <option v-for="t in MUSIC_TRACKS" :key="t" :value="t" :disabled="t === 'custom' && !project.audio.music.custom">{{ MUSIC_LABELS[t] }}{{ t === 'custom' && project.audio.music.custom ? ` · ${project.audio.music.custom.name}` : '' }}</option>
       </select>
     </label>
+    <p v-if="project.audio.music.track === 'custom' && project.audio.music.custom" class="credit">
+      <b>{{ project.audio.music.custom.name }}</b> · {{ project.audio.music.custom.duration.toFixed(0) }}s<span v-if="project.audio.music.custom.license"> · {{ licenseLabel(project.audio.music.custom.license) }}</span>
+      <button v-if="project.audio.music.custom.credit" class="ghost" title="Copy the attribution for the caption" @click="copyCredit"><Icon name="copy" /> Copy credit</button>
+    </p>
+    <label class="field-col">
+      Library <small class="dim">Kevin MacLeod · CC BY 4.0 · fetched from archive.org, no key</small>
+      <select v-model="shelf" :disabled="downloading.running" @change="shelf && audio.useLibraryTrack(shelf); shelf = ''">
+        <option value="">Pick a real track…</option>
+        <option v-for="t in MUSIC_LIBRARY" :key="t.id" :value="t.id">{{ t.title }} · {{ t.mood }} · {{ Math.round(t.seconds / 60) }} min</option>
+      </select>
+    </label>
+    <form class="script-actions" @submit.prevent="audio.search(query)">
+      <input v-model="query" class="grow" placeholder="Search the Internet Archive (CC0 / CC BY only)…" aria-label="Music search" :disabled="searching" />
+      <button type="submit" class="ghost" :disabled="!query.trim() || searching"><Icon name="sparkle" /> {{ searching ? 'Searching…' : 'Search' }}</button>
+    </form>
+    <ul v-if="archiveItems.length && !archiveFilesOf" class="results">
+      <li v-for="item in archiveItems" :key="item.identifier">
+        <button class="ghost wide" @click="audio.openItem(item)">{{ item.title }} <small>{{ item.creator || '—' }} · {{ licenseLabel(item.license) }}</small></button>
+      </li>
+    </ul>
+    <div v-if="archiveFilesOf" class="results">
+      <button class="ghost" @click="audio.archiveFilesOf.value = null"><Icon name="back" /> {{ archiveFilesOf.item.title }}</button>
+      <ul>
+        <li v-for="f in archiveFilesOf.files" :key="f.name">
+          <button class="ghost wide" :disabled="downloading.running" @click="audio.useArchiveFile(archiveFilesOf!.item, f)">{{ f.title }} <small>{{ Math.round(f.seconds / 60) }} min · {{ (f.bytes / 1e6).toFixed(1) }} MB</small></button>
+        </li>
+      </ul>
+    </div>
+    <p v-if="downloading.running" class="note">Downloading {{ downloading.label }} · {{ Math.round(downloading.fraction * 100) }}% <button class="ghost" @click="audio.cancelDownload()">Cancel</button></p>
     <div class="script-actions">
-      <button class="ghost" @click="musicFile?.click()"><Icon name="music" /> Import a track</button>
+      <button class="ghost" @click="musicFile?.click()"><Icon name="music" /> Import a file</button>
       <input ref="musicFile" type="file" accept="audio/*" hidden @change="($event.target as HTMLInputElement).files?.[0] && audio.importMusicFile(($event.target as HTMLInputElement).files![0]!)" />
       <span class="dim">MP3, WAV, OGG · stored locally</span>
     </div>

@@ -84,6 +84,15 @@ export async function synthesizeLine(r: TtsRequest, signal?: AbortSignal): Promi
   if (!buffer) throw new Error('Clip could not be decoded')
   return { hash, duration: Math.round((buffer.duration + VOICE_TAIL) * 100) / 100, envelope: envelopeOf(clipOf(buffer).samples, buffer.sampleRate) }
 }
+/** A track fetched from a URL: stored under the URL's hash, decoded once to measure it. */
+export async function storeTrack(url: string, bytes: ArrayBuffer, name: string, extra: { credit?: string; license?: string }) {
+  const hash = await sha256(`track\u001f${url}`)
+  await putClip(hash, bytes)
+  forgetDecoded(hash)
+  const buffer = await decodeClip(hash)
+  if (!buffer) throw new Error('This track could not be decoded as audio')
+  return { hash, name, duration: Math.round(buffer.duration * 10) / 10, url, ...extra }
+}
 /** An imported music file: stored under its content hash, decoded once to measure it. */
 export async function importMusic(file: File) {
   const bytes = await file.arrayBuffer()

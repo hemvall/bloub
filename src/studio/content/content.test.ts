@@ -18,6 +18,7 @@ import { ENVIRONMENTS, ENVIRONMENT_IDS } from '../environments/catalog'
 import { CHARACTERS, CHARACTER_KINDS, idleProfile } from '../characters/catalog'
 import { envelopeOf, mixPlan, DEFAULT_AUDIO, DEFAULT_VOICE } from '../audio/plan'
 import { renderMixSamples } from '../audio/mix'
+import { archiveCredit, commercialOk, licenseLabel, MUSIC_LIBRARY, parseFiles, parseSearch } from '../audio/library'
 import { renderMusic } from '../audio/music'
 import { renderAmbience } from '../audio/ambience'
 import { peak, track } from '../audio/dsp'
@@ -414,6 +415,39 @@ describe('audio', () => {
     expect(again.samples).toEqual(mix.samples)
     const missing = await renderMixSamples(small, async () => undefined)
     expect(missing.missing).toEqual(['voice:d-1'])
+  })
+  it('ships a music shelf with unique, attributed, archive-hosted tracks and filters licences', () => {
+    const ids = new Set(MUSIC_LIBRARY.map((t) => t.id))
+    expect(ids.size).toBe(MUSIC_LIBRARY.length)
+    for (const t of MUSIC_LIBRARY) {
+      expect(t.url, t.id).toMatch(/^https:\/\/archive\.org\/download\/KevinMacLeod_2019-04_Discography\/Kevin%20MacLeod\/.+\.mp3$/)
+      expect(t.url, t.id).not.toContain(' ')
+      expect(t.credit, t.id).toContain('Kevin MacLeod (incompetech.com)')
+      expect(commercialOk(t.license), t.id).toBe(true)
+      expect(t.seconds, t.id).toBeGreaterThan(30)
+    }
+    expect(commercialOk('http://creativecommons.org/licenses/by-nc-nd/2.5/')).toBe(false)
+    expect(commercialOk('http://creativecommons.org/licenses/by-nd/3.0/')).toBe(false)
+    expect(commercialOk('https://creativecommons.org/publicdomain/zero/1.0/')).toBe(true)
+    expect(commercialOk('http://creativecommons.org/licenses/by-sa/3.0/')).toBe(true)
+    expect(commercialOk(undefined)).toBe(false)
+    expect(licenseLabel('http://creativecommons.org/licenses/by/4.0/')).toBe('CC BY 4.0')
+    expect(licenseLabel('https://creativecommons.org/publicdomain/zero/1.0/')).toBe('CC0')
+    const items = parseSearch({ response: { docs: [
+      { identifier: 'ok', title: 'Ok', creator: ['A', 'B'], licenseurl: 'http://creativecommons.org/licenses/by/3.0/', downloads: 5 },
+      { identifier: 'nc', title: 'No', creator: 'C', licenseurl: 'http://creativecommons.org/licenses/by-nc/3.0/', downloads: 50 }
+    ] } })
+    expect(items.map((i) => i.identifier)).toEqual(['ok'])
+    expect(items[0]!.creator).toBe('A, B')
+    const files = parseFiles('it em', { files: [
+      { name: 'a/Track One.mp3', length: '120.5', size: '4000000' },
+      { name: 'short.mp3', length: '5', size: '100' },
+      { name: 'cover.jpg', size: '100' },
+      { name: 'huge.mp3', length: '600', size: '90000000' }
+    ] })
+    expect(files.map((f) => f.title)).toEqual(['Track One'])
+    expect(files[0]!.url).toBe('https://archive.org/download/it%20em/a/Track%20One.mp3')
+    expect(archiveCredit(items[0]!, files[0]!)).toBe('Track One by A, B (CC BY 3.0) https://archive.org/details/ok')
   })
   it('accepts projects saved before audio existed', () => {
     const old = JSON.parse(serializeProject(chatbotVsAgent())) as Record<string, unknown>
