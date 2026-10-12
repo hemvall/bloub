@@ -1,9 +1,15 @@
-import { CAMERA_PRESETS } from '../camera/presets'
-export { CAMERA_PRESETS } from '../camera/presets'
+/** The scene document: the single source of truth. Everything on screen is a function of it and a time `t`. */
 export type Vec3 = [number, number, number]
-export type Expression = 'tired' | 'curious' | 'happy'
+export type Aspect = '16:9' | '9:16' | '1:1'
+export type EnvironmentId = 'night-bar' | 'rooftop' | 'stage'
+export type CharacterKind = 'kit' | 'pip' | 'bo'
+export type Expression = 'neutral' | 'tired' | 'curious' | 'happy' | 'sad' | 'surprised' | 'annoyed'
+export type ActionId = 'sigh' | 'nod' | 'shake' | 'bounce' | 'wave' | 'think' | 'laugh'
+export type PropKind = 'glass' | 'bottle' | 'cup' | 'plant' | 'book' | 'lamp'
 export type GazeTarget =
-  { kind: 'camera' } | { kind: 'object'; id: string } | { kind: 'point'; position: Vec3 }
+  | { kind: 'camera' }
+  | { kind: 'object'; id: string }
+  | { kind: 'point'; position: Vec3 }
 export interface CameraPose {
   position: Vec3
   target: Vec3
@@ -12,6 +18,7 @@ export interface CameraPose {
 export interface CharacterData {
   id: string
   name: string
+  kind: CharacterKind
   position: Vec3
   rotation: Vec3
   scale: number
@@ -21,7 +28,7 @@ export interface CharacterData {
 }
 export interface PropData {
   id: string
-  kind: 'glass' | 'bottle'
+  kind: PropKind
   position: Vec3
   rotation: Vec3
   scale: number
@@ -33,65 +40,57 @@ export interface LightData {
   color: string
   intensity: number
 }
+export interface EnvironmentSettings {
+  id: EnvironmentId
+  fog: number
+  /** 0 to 1; ignored by environments without weather. */
+  rain: number
+  /** Bloom strength; 0 skips the post-processing pass entirely. */
+  bloom: number
+}
+interface EventBase {
+  /** Stable id: the timeline is edited by id, never by index. */
+  id: string
+  time: number
+}
 export type TimelineEvent =
-  | { type: 'camera'; time: number; pose: CameraPose }
-  | { type: 'position'; time: number; character: string; position: Vec3 }
-  | { type: 'gaze'; time: number; character: string; target: GazeTarget }
-  | { type: 'expression'; time: number; character: string; expression: Expression }
+  | (EventBase & { type: 'camera'; pose: CameraPose })
+  | (EventBase & { type: 'position'; character: string; position: Vec3 })
+  | (EventBase & { type: 'gaze'; character: string; target: GazeTarget })
+  | (EventBase & { type: 'expression'; character: string; expression: Expression })
+  | (EventBase & { type: 'dialogue'; character: string; text: string; duration: number })
+  | (EventBase & { type: 'action'; character: string; action: ActionId })
+export type EventType = TimelineEvent['type']
 export interface SceneData {
-  version: 1
+  version: 2
   name: string
   duration: number
   fps: number
-  aspect: '16:9' | '9:16' | '1:1'
-  environment: { id: 'night-bar'; fog: number; rain: number }
+  aspect: Aspect
+  environment: EnvironmentSettings
   camera: CameraPose
   characters: CharacterData[]
   props: PropData[]
   lights: LightData[]
   timeline: TimelineEvent[]
 }
-export function createScene(): SceneData {
-  return {
-    version: 1,
-    name: 'Last light · Night bar',
-    duration: 12,
-    fps: 60,
-    aspect: '16:9',
-    environment: { id: 'night-bar', fog: 0.028, rain: 0.7 },
-    camera: structuredClone(CAMERA_PRESETS.Medium!),
-    characters: [
-      {
-        id: 'kit',
-        name: 'Kit',
-        position: [0, 1.05, -1.4],
-        rotation: [0, 0, 0],
-        scale: 1,
-        color: '#ebe8df',
-        expression: 'tired',
-        gaze: { kind: 'object', id: 'window' }
-      }
-    ],
-    props: [
-      {
-        id: 'glass',
-        kind: 'glass',
-        position: [1.15, 1.92, 0],
-        rotation: [0, 0, 0],
-        scale: 1,
-        color: '#eab777'
-      }
-    ],
-    lights: [
-      { id: 'warm', position: [-3, 4.1, 1], color: '#ffbc72', intensity: 35 },
-      { id: 'moon', position: [3, 3.5, -3], color: '#7aafff', intensity: 28 }
-    ],
-    timeline: [
-      { type: 'camera', time: 0, pose: structuredClone(CAMERA_PRESETS.Medium!) },
-      { type: 'camera', time: 7, pose: structuredClone(CAMERA_PRESETS['Close-up']!) },
-      { type: 'gaze', time: 0, character: 'kit', target: { kind: 'object', id: 'window' } },
-      { type: 'gaze', time: 3.5, character: 'kit', target: { kind: 'camera' } },
-      { type: 'expression', time: 4, character: 'kit', expression: 'curious' }
-    ]
-  }
+export const ASPECTS: Aspect[] = ['16:9', '9:16', '1:1']
+export const EXPRESSIONS: Expression[] = ['neutral', 'tired', 'curious', 'happy', 'sad', 'surprised', 'annoyed']
+export const ACTIONS: ActionId[] = ['sigh', 'nod', 'shake', 'bounce', 'wave', 'think', 'laugh']
+export const PROP_KINDS: PropKind[] = ['glass', 'bottle', 'cup', 'plant', 'book', 'lamp']
+export const EVENT_TYPES: EventType[] = ['camera', 'position', 'gaze', 'expression', 'dialogue', 'action']
+/** Export sizes per format; 1080 on the short side is the short-form standard. */
+export const OUTPUT_SIZE: Record<Aspect, [number, number]> = {
+  '16:9': [1920, 1080],
+  '9:16': [1080, 1920],
+  '1:1': [1080, 1080]
+}
+export function aspectRatio(aspect: Aspect) {
+  const [w, h] = OUTPUT_SIZE[aspect]
+  return w / h
+}
+let counter = 0
+export function uid(prefix: string) {
+  counter += 1
+  return `${prefix}-${counter.toString(36)}${Math.floor(Math.random() * 1296).toString(36)}`
 }

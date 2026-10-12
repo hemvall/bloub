@@ -1,7 +1,10 @@
 import type { CameraPose, CharacterData, SceneData, TimelineEvent, Vec3 } from '../scene/model'
+import { CHARACTERS } from '../characters/catalog'
+import { FACES, mixFaces, type FaceParams } from '../animation/expressions'
+import type { Subject } from '../camera/presets'
 export const smooth = (t: number) => t * t * (3 - 2 * t)
 export function lerp3(a: Vec3, b: Vec3, t: number): Vec3 {
-  return a.map((v, i) => v + (b[i]! - v) * t) as Vec3
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]
 }
 export function mixCamera(a: CameraPose, b: CameraPose, t: number): CameraPose {
   return {
@@ -13,6 +16,7 @@ export function mixCamera(a: CameraPose, b: CameraPose, t: number): CameraPose {
 export function ordered<T extends TimelineEvent>(events: T[]): T[] {
   return [...events].sort((a, b) => a.time - b.time)
 }
+/** Samples keys with the base value at t=0 and a hold after the last key. */
 export function sample<T>(
   keys: { time: number; value: T }[],
   base: T,
@@ -23,11 +27,13 @@ export function sample<T>(
   let previous = all[0]!
   for (const next of all.slice(1)) {
     if (next.time > time)
-      return mix(
-        previous.value,
-        next.value,
-        smooth(Math.max(0, (time - previous.time) / (next.time - previous.time)))
-      )
+      return next.time === previous.time
+        ? previous.value
+        : mix(
+            previous.value,
+            next.value,
+            smooth(Math.max(0, (time - previous.time) / (next.time - previous.time)))
+          )
     previous = next
   }
   return previous.value
@@ -63,4 +69,72 @@ export function characterAt(
     if (e.type === 'gaze') result.gaze = e.target
   }
   return result
+}
+const FACE_BLEND = 0.35
+/** Expression mid-blend: face changes never jump. */
+export function faceAt(scene: SceneData, character: CharacterData, time: number): FaceParams {
+  let from = character.expression,
+    to = character.expression,
+    changed = -10
+  for (const e of ordered(scene.timeline)) {
+    if (e.time > time) break
+    if (e.type === 'expression' && e.character === character.id) {
+      from = to
+      to = e.expression
+      changed = e.time
+    }
+  }
+  return mixFaces(FACES[from], FACES[to], smooth(Math.min(1, (time - changed) / FACE_BLEND)))
+}
+export interface ActiveDialogue {
+  character: CharacterData
+  text: string
+  progress: number
+  since: number
+  remaining: number
+}
+export function dialogueAt(scene: SceneData, time: number): ActiveDialogue[] {
+  const result: ActiveDialogue[] = []
+  for (const e of ordered(scene.timeline)) {
+    if (e.type !== 'dialogue' || time < e.time || time >= e.time + e.duration) continue
+    const character = scene.characters.find((c) => c.id === e.character)
+    if (character)
+      result.push({
+        character,
+        text: e.text,
+        progress: (time - e.time) / e.duration,
+        since: time - e.time,
+        remaining: e.time + e.duration - time
+      })
+  }
+  return result
+}
+export function speakingAt(scene: SceneData, character: string, time: number) {
+  return scene.timeline.some(
+    (e) =>
+      e.type === 'dialogue' &&
+      e.character === character &&
+      time >= e.time &&
+      time < e.time + e.duration
+  )
+}
+export function eyeHeight(character: CharacterData) {
+  return CHARACTERS[character.kind].eyeHeight * character.scale
+}
+/** What gazes and framings aim at: the character's eyes at its current position. */
+export function eyesOf(scene: SceneData, character: CharacterData, time: number): Vec3 {
+  const p = characterAt(scene, character, time).position
+  return [p[0], p[1] + eyeHeight(character), p[2]]
+}
+export function subjectOf(scene: SceneData, character: CharacterData, time: number): Subject {
+  return {
+    position: characterAt(scene, character, time).position,
+    yaw: character.rotation[1],
+    eyeHeight: eyeHeight(character)
+  }
+}
+/** ~2.6 words per second, never under 1.2 s. */
+export function readingTime(text: string) {
+  const words = text.trim().split(/\s+/).filter(Boolean).length
+  return Math.max(1.2, Math.round((0.6 + words / 2.6) * 10) / 10)
 }
