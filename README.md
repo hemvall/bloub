@@ -1,5 +1,18 @@
 # bloub
 
+**Scene Studio** lives at `/studio` or `/#studio`: a content engine for short vertical videos
+about AI agents and automation, built around Lew, the recurring main character. A project is a
+script, in English with a French version behind it (lines, shots, stage directions), that
+compiles deterministically into a 3D
+scene: cuts, gaze, listening, subtitles with the spoken word highlighted, voices from OpenAI or
+ElevenLabs with your key, real Creative Commons music from the Internet Archive or your own files,
+room tone and SFX mixed offline, then a
+1080x1920 MP4 with an AAC track straight from the browser. Six sets (Lew's office at night, a meeting room, an abstract AI lab, and the
+original bar, rooftop and stage), six characters (Lew, a CEO and a developer archetype, plus Kit,
+Pip and Bo), templates, a library, a chat director, and an optional Claude generator that turns a
+brief into a whole project. See the [Scene Studio guide](docs/scene-studio.md).
+The original SVG avatar editor remains at `/`.
+
 An SVG recreation of the x.ai bot avatar: **one filled black shape** that morphs
 between 14 states, **two white shapes** for the eyes that morph independently, on
 a plain background. No animation library.
