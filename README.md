@@ -1,10 +1,11 @@
 # bloub
 
-**Scene Studio** is available at `/studio` or `/#studio`: a browser-native Three.js editor
-with an original toon cat mascot, a layered rainy night bar, camera and character
-keyframes, deterministic gaze/idle animation, and portable scene JSON. See the
-[Scene Studio guide](docs/scene-studio.md) for editing, architecture and the future video pipeline.
-The original SVG animation editor remains at `/`.
+**Scene Studio** lives at `/studio` or `/#studio`: a browser-native Three.js studio for short
+character clips. Three illustrated characters (Kit the cat, Pip the bird, Bo the bear), three
+environments (night bar, rooftop at dusk, studio stage), a keyframe timeline with dialogue and
+gestures, a chat director that turns a sentence into a scene (Claude, or an offline parser), and
+MP4 export at reel resolution straight from the browser. See the
+[Scene Studio guide](docs/scene-studio.md). The original SVG avatar editor remains at `/`.
 
 An SVG recreation of the x.ai bot avatar: **one filled black shape** that morphs
 between 14 states, **two white shapes** for the eyes that morph independently, on

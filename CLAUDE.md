@@ -169,6 +169,7 @@ Details and the reasoning behind each are in [docs/](docs/):
 | [docs/interface.md](docs/interface.md) | Three-column scene, CSS traps, icons |
 | [docs/export.md](docs/export.md) | The export bar, SVG/PNG/GIF/MP4, why the still export has no GIF |
 | [docs/i18n.md](docs/i18n.md) | The hand-rolled translation layer |
+| [docs/scene-studio.md](docs/scene-studio.md) | The Three.js studio under `src/studio/` (own document, commands, director, export); comments there are in English |
 
 The README is for people arriving at the repository: what the project is, how to
 run it, the component's API. Don't duplicate it here.

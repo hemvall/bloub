@@ -1,37 +1,101 @@
 # Scene Studio
 
-Open `/studio` or `/#studio`. The original SVG editor remains at `/`.
+Open `/studio` or `/#studio`. The original SVG avatar editor stays at `/`.
 
-Scene Studio is a browser-native editor for character-driven shots. The first scene is a procedural night bar and the first character is Kit, an original illustrated cat mascot. No remote model or image downloads are needed.
+Scene Studio is a browser-native tool for short character-driven clips: three illustrated
+characters, three environments, a timeline, a chat director that turns a sentence into a scene,
+and a one-click MP4 export at reel resolution. Nothing is downloaded at runtime; the whole set
+is procedural.
 
-## Editing
+## Using it
 
-- Drag the viewport to orbit, right-drag to pan, and scroll to dolly. Use the camera presets or select Scene camera to edit position, target and FOV. **Add Camera key** records the current view at the playhead; unrecorded orbit views are editor previews.
-- Select Kit or a prop from the outliner or viewport. Move, rotate and scale gizmos modify document transforms. Character moves also record a position key at the playhead.
-- The inspector edits coat, expressions, gaze target (camera, object or XYZ), lights, fog and rain. Position, expression and gaze edits record at the playhead so changes remain visible over existing tracks. The **at playhead** buttons also record the currently selected values. Timeline events take precedence over base values. On narrow screens the Inspector button opens these controls.
-- Space plays/pauses; arrow keys step by `1 / fps`. Click/drag the ruler or lanes, or use the accessible playhead slider to scrub. Click a diamond to seek; right-click to delete it. Shortening duration removes keys beyond the new end.
-- JSON export downloads a complete scene. Import validates before replacing the document. Reset restores the example. Browser local storage autosaves the latest document; exported JSON is the portable source of truth.
+- **Director** (right panel, default): describe the scene or a change in plain language. With an
+  Anthropic API key in the panel's settings the request goes to Claude; without one, a small
+  offline parser reads simple stage directions (`Kit looks at the window`, `after two seconds he
+  sighs`, `close-up at 3s`, `Pip says "hello"`, `no rain`, `vertical`). Both produce the same kind
+  of script and apply it through the same commands. Deep link to a scene with `#studio&scene=<id>`.
+- **Scenes** (left): a project holds several scenes, autosaved in the browser. `+` creates an
+  empty scene, one of the three examples, or a duplicate. Switch environment with the select.
+- **Viewport**: drag to orbit, right-drag to pan, scroll to dolly, click to select. `G`/`R`/`S`
+  switch the gizmo. The `Frame` buttons apply a camera preset on the selected character; `K`
+  records the current view as a camera key. The frame is always the output aspect (16:9, 9:16, 1:1).
+- **Inspector**: contextual fields for the selection. On a character, position, expression and
+  gaze record keys at the playhead; the `Beats` chips add an action; a line of dialogue is added
+  from here or the timeline. Clicking a key in the timeline inspects that key (text, duration,
+  time, action…).
+- **Timeline**: one lane per track. Drag a key to move it, click to select and seek, right-click
+  or `Del` to delete. Space plays, arrows step a frame (Shift: ten).
+- **Export**: MP4 at the output size and the scene's fps (60 by default), a PNG of the current
+  frame, or the scene JSON. Import validates before replacing the document.
 
 ## Architecture
 
-`src/studio/scene/model.ts` defines version 1: output settings, environment, camera pose, character/prop/light documents, and a discriminated union of camera, position, gaze and expression timeline events. All coordinates are in world units; Euler rotations are radians. There are bounded limits on imported objects, events, duration and file size.
+```
+src/studio/
+  scene/          model (v2 types), commands, examples
+  serialization/  validation + v1 migration, JSON
+  timeline/       pure evaluation: cameraAt, characterAt, faceAt, dialogueAt…
+  animation/      idle, gaze, expressions, actions — all pure functions of time
+  camera/         presets as framing rules relative to a subject
+  characters/     catalog (no three.js), rig, kit, pip, bo
+  environments/   catalog (no three.js), nightBar, rooftop, stage
+  props/          createProp
+  engine/         SceneEngine, toon materials, overlay (captions), geometry helpers
+  export/         MP4 (mediabunny, lazy) and PNG
+  director/       script format, applyScript, local rules, Claude client, prompt
+src/components/studio/   Vue: SceneStudio, Outliner, Viewport, Inspector, Director, Timeline
+```
 
-`SceneCommands` provides `addCharacter`, `setCharacterPosition`, `setGazeTarget`, `setExpression`, `addCameraKeyframe`, `addPositionKeyframe`, `addProp`, `setLight` and `setEnvironment`. The Vue interface is one client. Agents can construct the same documents and commands without interacting with UI components.
+**The document is the only state.** `SceneData` holds everything: output settings, environment,
+base camera, characters, props, lights and a timeline of events with stable ids. `SceneCommands`
+is the only writer (`addCharacter`, `setGazeTarget`, `say`, `act`, `cameraPreset`,
+`addCameraKeyframe`, `setEnvironment`, `moveEvent`…). The Vue store (`useStudioDocument`) edits a
+copy through the commands, validates it, and adopts it. The chat director produces a
+`DirectorScript` (a list of ops) that `applyScript` replays through the same commands, skipping a
+bad op with a warning instead of failing the whole turn. An agent can do exactly the same.
 
-`SceneEngine` owns Three.js objects, OrbitControls, TransformControls, selection, lighting, frame timing and lifecycle. Vue sends changed documents; it does not reconstruct the scene graph every frame. Environment geometry is created once; character/prop/light identities reconcile on document changes. ResizeObserver measures the actual output canvas, with capped devicePixelRatio (2), shadows and fog. Unmount disposes geometry, materials, textures, shadows, controls, observers, listeners, renderer and RAF.
+**Timeline model.** Events are `camera` (pose), `position`, `gaze`, `expression`, `dialogue`
+(text + duration) and `action` (a named gesture). Camera and position keys interpolate with a
+smoothstep and hold after the last key; expressions and gaze are step tracks with a short blend
+computed at evaluation time; dialogue and actions are windows. A key replaces the key of the same
+type, time and character.
 
-`Kit` has root/body/head/ear/eye/pupil/lid/mouth groups. Toon materials, outline shells, shallow facial geometry, asymmetric ears, whiskers and a curled tail establish its graphic identity. Pure-time idle signals produce breathing, drift, blinking, pupil drift and ear flicks. Gaze targets resolve in world space. Eyes blend rapidly; head angles use a fixed weighted history of scene samples to simulate inertia without depending on previous rendered frames. Body rotation stays separate. Gaze currently compensates for character yaw; arbitrary tilted character roots are supported visually but are not a full anatomical rig solver.
+**Characters.** One `CharacterRig` (root > body > arms, head > ears, eyes, mouth) animated by one
+`update()` from idle signals, gaze angles, blended face parameters and summed action poses.
+`kit.ts`, `pip.ts` and `bo.ts` only build geometry and set the rig's metrics. The look is a
+three-step toon gradient and inverted-hull outlines with a world-space line width, so the stroke
+weighs the same on a bear and a bird. Eyes lead the gaze in 180 ms; the head follows through a
+weighted average of recent gaze history (450 ms constant) recomputed from the document, not
+carried between frames. Blinks, breathing, sway and ear flicks are coprime sinusoids of time.
+
+**Environments** are built once per scene and swapped when the document's `environment.id`
+changes. Each environment's catalog entry (no three.js) lists gaze anchors, default seats, the
+base camera and atmosphere, so validation, the director and the UI know a scene without rendering
+it. Particles (rain, dust, motes) are positioned from `(index, time)` each frame.
 
 ## Deterministic rendering
 
-`cameraAt`, `characterAt`, `idleAt` and `gazeAt` depend only on the document and timestamp. Position/camera keys use smoothstep interpolation and hold after the last key. Expressions hold; gaze transitions have a short lead and head response. Rain and dust use index-derived sequences and scene time, never per-frame randomness.
+`engine.renderFrame(t)` evaluates the whole scene at `t` and draws it. The RAF loop only
+advances the playhead and measures FPS; it never feeds state back into the animation. Seeking
+backward reproduces the frame exactly, and a test locks the evaluation layer.
 
-`engine.renderFrame(time)` evaluates and renders a timestamp synchronously without changing the playhead. It hides editor overlays by default. `renderFrame(time, { overlays: true, camera: pose })` is used for editor rendering. The RAF wall clock advances only playback time and measures actual FPS; it does not define character animation. Seeking backward evaluates from data again. Determinism means identical animation state; GPU raster output can differ across browsers/hardware.
+`engine.capture(width, height)` switches the renderer to an explicit size and returns
+`frame(time, ctx)`, which draws the composited image (3D frame + captions from `overlay.ts`)
+into any 2D context. `export/video.ts` walks `duration × fps` frames through it and streams
+each into mediabunny's H.264 encoder (`await add` per frame bounds memory), at 1080×1920 for
+9:16, 1920×1080 for 16:9, 1080² for 1:1. The same overlay function draws the viewport captions,
+so what you see is what the file contains.
 
-For offline capture, create an engine on a host with explicit dimensions matching the scene aspect, pause playback, call `renderFrame(frame / scene.fps)`, and capture `engine.renderer.domElement`. The renderer currently preserves its drawing buffer for capture readiness; production capture should make this optional to reduce overhead. No MP4 pipeline is shipped in this foundation.
+## Performance
 
-## Performance and next steps
+The HUD measures real RAF intervals over 500 ms. Pixel ratio is capped at 2, one shadow map per
+environment (2048²), bloom runs only when the scene's `bloom` is above zero, instanced meshes for
+city windows, shared sphere geometry across every character part, particle buffers updated in
+place. The Anthropic SDK (`~60 kB gzip`) and mediabunny are dynamic imports, loaded on first use.
 
-The HUD measures actual RAF intervals over approximately 500 ms. Shadows use one 1024² directional map; practical lights do not allocate shadow maps. Pixel ratio is capped, city windows are instanced, static geometry is reused, and particle buffers update in place. A 60 FPS target depends on GPU, window size and pixel ratio; it is not guaranteed. The Three.js studio is lazy-loaded separately from the original editor; Vite currently reports its approximately 625 KB minified chunk as over the default 500 KB warning threshold. Profile before adding postprocessing or higher resolution captures.
+## What remains for fully automated video
 
-Full automated video production still needs scene scripting/planning, dialogue and audio synchronization, lip sync, action clips and rig blending, timeline undo/redo and key dragging, additional environments/characters, an explicit fixed-resolution frame capture API, encoding (WebCodecs/mediabunny or server jobs), cancellation/progress, and output validation. The scene version and discriminated timeline events provide migration points for these additions.
+Audio and TTS with lip timing, a richer action vocabulary (walks, props in hands), per-scene
+undo/redo, multi-scene renders stitched into one file, server-side batch rendering (the capture
+API is already headless-friendly), and an agent loop that calls `applyScript` directly rather
+than through the chat panel.
