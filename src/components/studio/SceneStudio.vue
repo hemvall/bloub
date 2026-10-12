@@ -1,145 +1,93 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue'
+import Icon from './Icon.vue'
 import StudioViewport from './StudioViewport.vue'
 import StudioTimeline from './StudioTimeline.vue'
 import StudioInspector from './StudioInspector.vue'
 import StudioOutliner from './StudioOutliner.vue'
+import StudioDirector from './StudioDirector.vue'
 import { useStudioDocument } from './useStudioDocument'
-import { CAMERA_PRESETS, type SceneData } from '@/studio/scene/model'
+import { ASPECTS, OUTPUT_SIZE } from '@/studio/scene/model'
 import { cameraAt } from '@/studio/timeline/evaluate'
-const {
-  scene,
-  bindViewport,
-  selected,
-  time,
-  playing,
-  fps,
-  ms,
-  inspectorOpen,
-  mode,
-  camera,
-  message,
-  jsonOpen,
-  json,
-  fileInput,
-  inspectorScene,
-  edit,
-  seek,
-  togglePlay,
-  setCamera,
-  cameraKey,
-  positionKey,
-  gazeKey,
-  expressionKey,
-  patch,
-  transform,
-  remove,
-  duration,
-  reset,
-  load,
-  importFile,
-  download,
-  addProp,
-  addCharacter,
-  legacy,
-  showJSON,
-  choosePreset
-} = useStudioDocument()
+const studio = useStudioDocument()
+const { scene, time, playing, fps, ms, message, jsonOpen, json, fileInput, exporting, panel } = studio
+const exportOpen = ref(false)
+const clock = computed(() => {
+  const t = time.value,
+    m = Math.floor(t / 60),
+    s = t - m * 60
+  return `${m}:${s.toFixed(2).padStart(5, '0')}`
+})
+const exportPercent = computed(() => (exporting.value.total ? Math.round((exporting.value.done / exporting.value.total) * 100) : 0))
+function legacy() {
+  window.location.href = '/#'
+  window.location.reload()
+}
 </script>
 <template>
-  <section class="scene-studio-shell" :class="{ 'inspector-open': inspectorOpen }">
-    <header class="studio-topbar">
-      <a
-        href="/#"
-        class="studio-brand"
-        title="Open original Bloub animation editor"
-        @click.prevent="legacy"
-      >
-        b
-        <span>l</span>
-        oub
-        <small>SCENE STUDIO</small>
+  <section class="studio" @click="exportOpen = false">
+    <header class="topbar">
+      <a href="/#" class="brand" title="Open the original Bloub avatar editor" @click.prevent="legacy">
+        bl<span>o</span>ub
+        <small>studio</small>
       </a>
-      <span class="top-divider" />
       <input
         class="scene-name"
         aria-label="Scene name"
         :value="scene.name"
-        @change="
-          edit((_, d) => {
-            d.name = ($event.target as HTMLInputElement).value
-          })
-        "
+        spellcheck="false"
+        @change="studio.rename(($event.target as HTMLInputElement).value)"
       />
-      <span class="document-version">v1</span>
-      <div class="toolbar-spacer" />
-      <button @click="reset">Reset scene</button>
-      <button @click="fileInput?.click()">Import</button>
-      <button @click="showJSON">Scene JSON</button>
-      <button class="accent-button" @click="download">↓ Export JSON</button>
-      <input
-        ref="fileInput"
-        type="file"
-        accept=".json,application/json"
-        hidden
-        @change="importFile"
-      />
-    </header>
-    <div class="studio-workspace">
-      <StudioOutliner
-        :scene="scene"
-        :selected="selected"
-        @select="selected = $event"
-        @add-character="addCharacter"
-        @add-prop="addProp"
-      />
-      <main class="studio-center">
-        <button
-          class="inspector-toggle"
-          :aria-expanded="inspectorOpen"
-          @click="inspectorOpen = !inspectorOpen"
-        >
-          {{ inspectorOpen ? 'Close inspector' : 'Inspector' }}
+      <div class="spacer" />
+      <div class="transport">
+        <button class="ghost" title="Go to start (Home)" @click="studio.seek(0)"><Icon name="start" /></button>
+        <button class="play" :title="playing ? 'Pause (Space)' : 'Play (Space)'" :aria-pressed="playing" @click="studio.togglePlay()">
+          <Icon :name="playing ? 'pause' : 'play'" :size="16" />
         </button>
-        <div class="viewport-toolbar">
-          <span>Perspective</span>
-          <span class="top-divider" />
-          <button
-            v-for="m in ['translate', 'rotate', 'scale'] as const"
-            :key="m"
-            :class="{ active: mode === m }"
-            @click="mode = m"
-          >
-            {{ { translate: 'Move', rotate: 'Rotate', scale: 'Scale' }[m] }}
-          </button>
-          <div class="toolbar-spacer" />
-          <select aria-label="Camera preset" value="" @change="choosePreset">
-            <option value="" disabled>Camera presets</option>
-            <option v-for="(_, preset) in CAMERA_PRESETS" :key="preset">
-              {{ preset }}
-            </option>
-          </select>
-          <select
-            aria-label="Output aspect ratio"
-            :value="scene.aspect"
-            @change="
-              edit((_, d) => {
-                d.aspect = ($event.target as HTMLSelectElement).value as SceneData['aspect']
-              })
-            "
-          >
-            <option>16:9</option>
-            <option>9:16</option>
-            <option>1:1</option>
-          </select>
+        <button class="ghost" title="Go to end (End)" @click="studio.seek(scene.duration)"><Icon name="end" /></button>
+        <output class="clock">{{ clock }}<span> / {{ scene.duration.toFixed(1) }}s</span></output>
+      </div>
+      <div class="spacer" />
+      <div class="segmented" role="radiogroup" aria-label="Output format">
+        <button
+          v-for="a in ASPECTS"
+          :key="a"
+          role="radio"
+          :aria-checked="scene.aspect === a"
+          :class="{ active: scene.aspect === a }"
+          :title="`${OUTPUT_SIZE[a][0]}×${OUTPUT_SIZE[a][1]}`"
+          @click="studio.setAspect(a)"
+        >
+          {{ a }}
+        </button>
+      </div>
+      <span class="hud" :title="`${ms.toFixed(2)} ms per frame`">
+        <b>{{ fps ? fps.toFixed(0) : '–' }}</b> fps <i>{{ ms.toFixed(1) }} ms</i>
+      </span>
+      <button class="ghost" title="Import scene JSON" @click="fileInput?.click()"><Icon name="import" /> Import</button>
+      <div class="menu" @click.stop>
+        <button class="primary" :aria-expanded="exportOpen" @click="exportOpen = !exportOpen"><Icon name="export" /> Export</button>
+        <div v-if="exportOpen" class="menu-list" role="menu">
+          <button @click="exportOpen = false; studio.exportMP4()"><Icon name="video" /> Video · MP4 <small>{{ OUTPUT_SIZE[scene.aspect].join('×') }}</small></button>
+          <button @click="exportOpen = false; studio.exportPNG()"><Icon name="image" /> Frame · PNG <small>at playhead</small></button>
+          <button @click="exportOpen = false; studio.exportJSON()"><Icon name="json" /> Scene · JSON</button>
+          <button @click="exportOpen = false; studio.showJSON()"><Icon name="copy" /> View scene JSON</button>
         </div>
+      </div>
+      <input ref="fileInput" type="file" accept=".json,application/json" hidden @change="studio.importFile" />
+    </header>
+    <div class="workspace">
+      <StudioOutliner :studio="studio" />
+      <main class="center">
         <StudioViewport
-          :ref="bindViewport"
+          :ref="studio.bindViewport"
           :scene="scene"
-          :selected="selected"
-          :mode="mode"
-          @select="selected = $event"
-          @camera="camera = $event"
-          @transform="transform"
+          :selected="studio.selected.value"
+          :mode="studio.mode.value"
+          :studio="studio"
+          @select="studio.select"
+          @camera="studio.camera.value = $event"
+          @transform="studio.transform"
           @error="message = $event"
           @frame="
             (t, f, m, p) => {
@@ -147,52 +95,51 @@ const {
               fps = f
               ms = m
               playing = p
-              if (p) camera = cameraAt(scene, t)
+              if (p) studio.camera.value = cameraAt(scene, t)
             }
           "
         />
-        <div class="viewport-status">
-          <span>{{ message || 'Scene ready · Space to play · Arrow keys to step one frame' }}</span>
-          <span class="performance-hud">
-            {{ fps ? `${fps.toFixed(0)} FPS` : 'Measuring…' }}
-            <small>{{ ms.toFixed(1) }} ms/frame</small>
-          </span>
+        <div class="status">
+          <span>{{ message || 'Space play · ←/→ step · K camera key · G/R/S gizmo · drag keys on the timeline' }}</span>
+          <span class="dim">{{ OUTPUT_SIZE[scene.aspect].join('×') }} · {{ scene.fps }} fps · {{ scene.environment.id }}</span>
         </div>
       </main>
-      <StudioInspector
-        :scene="inspectorScene"
-        :selected="selected"
-        :camera="camera"
-        @patch="patch"
-        @camera="setCamera"
-        @expression-key="expressionKey"
-        @gaze-key="gazeKey"
-      />
+      <aside class="side">
+        <div class="segmented tabs" role="tablist">
+          <button role="tab" :aria-selected="panel === 'director'" :class="{ active: panel === 'director' }" @click="panel = 'director'">
+            <Icon name="sparkle" /> Director
+          </button>
+          <button role="tab" :aria-selected="panel === 'inspector'" :class="{ active: panel === 'inspector' }" @click="panel = 'inspector'">
+            <Icon name="sliders" /> Inspector
+          </button>
+        </div>
+        <StudioDirector v-show="panel === 'director'" :studio="studio" />
+        <StudioInspector v-show="panel === 'inspector'" :studio="studio" />
+      </aside>
     </div>
-    <StudioTimeline
-      :scene="scene"
-      :time="time"
-      :playing="playing"
-      @seek="seek"
-      @play="togglePlay"
-      @duration="duration"
-      @camera-key="cameraKey"
-      @position-key="positionKey"
-      @gaze-key="gazeKey"
-      @remove="remove"
-    />
-    <div v-if="jsonOpen" class="json-backdrop" @click.self="jsonOpen = false">
-      <section class="json-dialog" role="dialog" aria-modal="true" aria-labelledby="json-title">
+    <StudioTimeline :studio="studio" />
+    <div v-if="jsonOpen" class="backdrop" @click.self="jsonOpen = false">
+      <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="json-title">
         <header>
-          <h2 id="json-title">Scene document</h2>
-          <button @click="jsonOpen = false" aria-label="Close scene JSON">×</button>
+          <h2 id="json-title">Scene JSON</h2>
+          <button class="ghost" aria-label="Close" @click="jsonOpen = false"><Icon name="x" /></button>
         </header>
-        <p>Versioned scene data. Edit and import to recreate a scene.</p>
         <textarea v-model="json" aria-label="Scene JSON" spellcheck="false" />
-        <p role="status">{{ message }}</p>
         <footer>
-          <button @click="download">Download current scene</button>
-          <button class="accent-button" @click="load(json)">Import this JSON</button>
+          <span class="dim">{{ message }}</span>
+          <button class="ghost" @click="studio.exportJSON()">Download</button>
+          <button class="primary" @click="studio.load(json)">Apply</button>
+        </footer>
+      </section>
+    </div>
+    <div v-if="exporting.running" class="backdrop">
+      <section class="dialog export-dialog" role="dialog" aria-modal="true" aria-live="polite">
+        <header><h2>Rendering video</h2></header>
+        <p class="dim">{{ exporting.label }} · frame {{ exporting.done }} of {{ exporting.total }}</p>
+        <div class="progress"><div :style="{ width: `${exportPercent}%` }" /></div>
+        <footer>
+          <span class="dim">{{ exportPercent }}%</span>
+          <button class="ghost" @click="studio.cancelExport()">Cancel</button>
         </footer>
       </section>
     </div>
