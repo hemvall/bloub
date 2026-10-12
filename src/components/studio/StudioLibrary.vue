@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import Icon from './Icon.vue'
 import type { StudioDocument } from './useStudioDocument'
 import { TEMPLATES } from '@/studio/content/templates'
+import { EXAMPLE_REELS } from '@/studio/content/examples'
 import { OUTPUT_PRESETS } from '@/studio/render/presets'
 import { ENVIRONMENTS } from '@/studio/environments/catalog'
 import { PROJECT_STATUSES, type ContentProject, type ProjectStatus } from '@/studio/content/project'
@@ -14,9 +15,9 @@ const brief = ref('')
 const menu = ref(false)
 const keyOpen = ref(false)
 const EXAMPLES = [
-  'A 20-second Reel where a CEO asks Lew why they need an agent when they already have ChatGPT. Office at night, two-shot then close-ups, funny but accurate.',
-  'Explain why RAG is not just putting documents in a vector database. Lew alone in the AI lab, 25 seconds, one punchline.',
-  'A developer asks an AI to rename one variable and it refactors everything. Dev and Lew, 18 seconds.'
+  'Un Reel de 20 secondes : un CEO demande à Lew pourquoi il faudrait un agent alors qu’ils ont déjà ChatGPT. Bureau de nuit, plan à deux puis gros plans, drôle mais exact.',
+  'Explique pourquoi « mettre nos docs dans une base vectorielle » n’est pas du RAG. Lew seul dans le lab, 25 secondes, une chute.',
+  'Un dev demande à une IA de renommer une variable et elle refactore tout. Dev et Lew, 18 secondes.'
 ]
 const visible = computed(() => {
   const list = filter.value === 'all' ? projects.value : projects.value.filter((p) => p.status === filter.value)
@@ -62,12 +63,14 @@ onBeforeUnmount(() => window.removeEventListener('pointerdown', outside))
         <div v-if="menu" class="menu-list">
           <button @click="menu = false; studio.newProject()"><Icon name="script" /> Blank · Lew alone</button>
           <button v-for="t in TEMPLATES" :key="t.id" @click="menu = false; studio.newProject(t.id)"><Icon name="film" /> {{ t.name }} <small>{{ t.duration }}s</small></button>
+          <span class="menu-group">Examples</span>
+          <button v-for="r in EXAMPLE_REELS" :key="r.id" @click="menu = false; studio.newFromExample(r.id)"><Icon name="reel" /> {{ r.title }} <small>{{ r.tags[0] }}</small></button>
         </div>
       </span>
     </header>
     <form class="command-bar" @submit.prevent="submit">
       <Icon name="wand" :size="18" />
-      <input v-model="brief" type="text" placeholder="Describe your video… e.g. “25-second Reel: a CEO asks Lew why they need an agent when they already have ChatGPT”" aria-label="Video brief" :disabled="generating" />
+      <input v-model="brief" type="text" placeholder="Décris ta vidéo… ex. « Reel de 25 s : un CEO demande à Lew pourquoi un agent alors qu’ils ont déjà ChatGPT »" aria-label="Video brief" :disabled="generating" />
       <button v-if="generating" type="button" class="ghost" @click="studio.cancelGenerate()"><Icon name="stop" /> Cancel</button>
       <button v-else type="submit" class="primary" :disabled="!brief.trim() || !canGenerate" :title="canGenerate ? 'Generate a project with Claude' : 'Needs an Anthropic API key'">
         <Icon name="sparkle" /> Generate

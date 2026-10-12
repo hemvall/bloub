@@ -5,6 +5,7 @@ import { castMember } from './project'
 /**
  * Content templates: a proven shape (scene, cast, shot structure, pacing) with
  * a sample script to replace. Instantiating one is `createProject` + `setScript`.
+ * Scripts are in French, the content's main language.
  */
 export interface ContentTemplate {
   id: string
@@ -26,175 +27,175 @@ const extra = (kind: CharacterKind, role: string, name: string, mark?: string) =
 export const TEMPLATES: ContentTemplate[] = [
   {
     id: 'misconception',
-    name: 'AI misconception',
-    premise: 'CEO believes X → Lew explains why it is wrong → punchline.',
-    structure: ['Two-shot: the belief, stated with confidence', 'Medium on Lew: one question that exposes the gap', 'Close-ups: the admission', 'Slow push on Lew: the punchline'],
+    name: 'Idée reçue sur l’IA',
+    premise: 'Le CEO croit X → Lew explique pourquoi c’est faux → chute.',
+    structure: ['Plan à deux : la croyance, affirmée avec aplomb', 'Plan moyen sur Lew : une question qui révèle le trou', 'Gros plans : l’aveu', 'Zoom lent sur Lew : la chute'],
     environment: 'office-night',
     format: 'reel',
     cast: [lew('desk'), ceo('guest')],
     duration: 20,
     tags: ['explainer', 'agents'],
     script: `CAMERA: two-shot Lew CEO
-CEO (happy): "We put all our documents in a vector database. We have RAG now."
+CEO (content): "On a mis tous nos documents dans une base vectorielle. On a du RAG maintenant."
 
-Lew looks at CEO.
+Lew regarde le CEO.
 CAMERA: medium Lew
-LEW (deadpan): "Ask it which contract expires next month."
+LEW (impassible): "Demandez-lui quel contrat expire le mois prochain."
 
 CAMERA: close-up CEO
-CEO looks confused.
-CEO: "It... gave me three different answers."
+Le CEO a l'air perdu.
+CEO: "Il… m'a donné trois réponses différentes."
 
 CAMERA: close-up Lew slow-push
-LEW (smug): "Then you have a search box."
+LEW (narquois): "Alors vous avez un moteur de recherche."
 
 PAUSE 0.4
 
-LEW: "Not a knowledge base."
+LEW: "Pas une base de connaissances."
 `
   },
   {
     id: 'agent-demo',
-    name: 'Agent demo',
-    premise: 'Someone asks for something → the agent executes a workflow → result.',
-    structure: ['Medium on the user: the request', 'Close-up on the screen: the agent working', 'Two-shot: the result, and what it means'],
+    name: 'Démo d’agent',
+    premise: 'Quelqu’un demande quelque chose → l’agent exécute le workflow → résultat.',
+    structure: ['Plan moyen sur le client : la demande', 'Gros plan sur l’écran : l’agent au travail', 'Plan à deux : le résultat, et ce qu’il veut dire'],
     environment: 'office-night',
     format: 'reel',
     cast: [lew('desk'), extra('ceo', 'client', 'Client', 'guest')],
     duration: 22,
     tags: ['demo', 'product'],
     script: `CAMERA: two-shot Lew Client
-CLIENT: "Can your agent follow up with the leads we haven't touched in two weeks?"
+CLIENT: "Votre agent peut relancer les prospects qu'on n'a pas touchés depuis deux semaines ?"
 
 CAMERA: medium Lew
-Lew looks at laptop.
-LEW: "It's reading the CRM now."
+Lew regarde le laptop.
+LEW: "Il est en train de lire le CRM."
 
 PAUSE 0.6
 
-LEW: "Fourteen leads. Nine drafts. Three meetings proposed."
+LEW: "Quatorze prospects. Neuf brouillons. Trois rendez-vous proposés."
 
 CAMERA: close-up Client
-CLIENT (surprised): "That took eleven seconds."
+CLIENT (surpris): "Ça a pris onze secondes."
 
 CAMERA: medium Lew slow-push
-Lew looks at the camera.
-LEW (smug): "It also logged everything. Ask your last intern to do that."
+Lew regarde la caméra.
+LEW (narquois): "Et il a tout journalisé. Demandez ça à votre dernier stagiaire."
 `
   },
   {
     id: 'before-after',
-    name: 'Before / after',
-    premise: 'The manual workflow, then the Lew workflow.',
-    structure: ['Medium on the employee: the manual grind', 'Cut to Lew: the same task, automated', 'Close-up: the difference in one line'],
+    name: 'Avant / après',
+    premise: 'Le workflow manuel, puis le workflow Lew.',
+    structure: ['Plan moyen sur l’employé : la corvée manuelle', 'Cut sur Lew : la même tâche, automatisée', 'Gros plan : la différence en une phrase'],
     environment: 'meeting-room',
     format: 'reel',
     cast: [extra('dev', 'ops', 'Ops', 'left'), lew('head')],
     duration: 20,
     tags: ['automation', 'workflow'],
     script: `CAMERA: medium Ops
-OPS (tired): "Every Monday I copy the support tickets into a sheet, tag them, and email the summary."
+OPS (fatigué): "Chaque lundi je copie les tickets support dans un tableur, je les tague, et j'envoie le résumé par mail."
 
-Ops sighs.
-OPS: "Takes me the whole morning."
+Ops soupire.
+OPS: "Ça me prend toute la matinée."
 
 CAMERA: medium Lew
-LEW: "The agent reads the tickets, tags them, writes the summary and posts it in Slack."
+LEW: "L'agent lit les tickets, les tague, écrit le résumé et le poste sur Slack."
 
 PAUSE 0.3
 
 CAMERA: close-up Lew
-LEW (deadpan): "Monday morning is yours again."
+LEW (impassible): "Le lundi matin est à vous."
 
 CAMERA: close-up Ops
-Ops looks surprised.
-OPS: "What do I do with it?"
+Ops a l'air surpris.
+OPS: "Et j'en fais quoi ?"
 
 CAMERA: two-shot Lew Ops
-LEW (smug): "Not that."
+LEW (narquois): "Pas ça."
 `
   },
   {
     id: 'dev-joke',
-    name: 'Developer joke',
-    premise: 'A developer asks the AI for something simple → chaos.',
-    structure: ['Medium on the dev: the simple ask', 'Close-up on the screen: the escalation', 'Two-shot with Lew: the dry conclusion'],
+    name: 'Blague de dev',
+    premise: 'Un développeur demande un truc simple à l’IA → chaos.',
+    structure: ['Plan moyen sur le dev : la demande simple', 'Gros plan sur l’écran : l’escalade', 'Plan à deux avec Lew : la conclusion sèche'],
     environment: 'ai-lab',
     format: 'reel',
     cast: [dev('left'), lew('right')],
     duration: 18,
     tags: ['humour', 'developers'],
     script: `CAMERA: medium Dev
-DEV (tired): "I asked it to rename one variable."
+DEV (fatigué): "Je lui ai demandé de renommer une variable."
 
 PAUSE 0.3
 
-DEV: "It refactored the whole module, added tests, and opened a pull request titled 'Modernize'."
+DEV: "Il a refactoré tout le module, ajouté des tests, et ouvert une pull request intitulée « Modernisation »."
 
 CAMERA: close-up Lew
-Lew looks at Dev.
-LEW (deadpan): "Did the tests pass?"
+Lew regarde Dev.
+LEW (impassible): "Les tests passent ?"
 
 CAMERA: close-up Dev
-Dev looks away.
-DEV: "...they pass now."
+Dev détourne le regard.
+DEV: "…ils passent maintenant."
 
 CAMERA: two-shot Lew Dev slow-push
-LEW (smug): "That's not an agent. That's an intern with admin rights."
+LEW (narquois): "C'est pas un agent. C'est un stagiaire avec les droits admin."
 `
   },
   {
     id: 'business-pain',
-    name: 'Business pain',
-    premise: 'An employee doing a repetitive task → Lew automates it.',
-    structure: ['Medium on the employee: the task, in numbers', 'Medium on Lew: what the agent does instead', 'Close-up: the payoff'],
+    name: 'Douleur métier',
+    premise: 'Un employé fait une tâche répétitive → Lew l’automatise.',
+    structure: ['Plan moyen sur l’employé : la tâche, en chiffres', 'Plan moyen sur Lew : ce que fait l’agent à la place', 'Gros plan : le gain'],
     environment: 'meeting-room',
     format: 'reel',
     cast: [extra('ceo', 'sales', 'Sales', 'right'), lew('head')],
     duration: 20,
     tags: ['sales', 'automation'],
     script: `CAMERA: medium Sales
-SALES: "After every call I update the CRM, write the follow-up and book the next step."
+SALES: "Après chaque appel je mets à jour le CRM, j'écris la relance et je cale la prochaine étape."
 
-Sales sighs.
-SALES: "Forty calls a week."
+Sales soupire.
+SALES: "Quarante appels par semaine."
 
 CAMERA: medium Lew
-LEW: "The agent listens to the call, updates the CRM and drafts the follow-up before you hang up."
+LEW: "L'agent écoute l'appel, met à jour le CRM et rédige la relance avant que vous ayez raccroché."
 
 CAMERA: close-up Sales
-SALES (surprised): "Before I hang up?"
+SALES (surpris): "Avant que j'aie raccroché ?"
 
 CAMERA: close-up Lew slow-push
-LEW (deadpan): "It types faster than you talk."
+LEW (impassible): "Il tape plus vite que vous parlez."
 `
   },
   {
     id: 'explainer',
-    name: 'Technical explanation',
-    premise: 'One concept, one contrast, one line to remember.',
-    structure: ['Medium on Lew: the term everyone uses', 'Two-shot: the question that separates the two', 'Close-up slow push: the definition in one sentence'],
+    name: 'Explication technique',
+    premise: 'Un concept, un contraste, une phrase à retenir.',
+    structure: ['Plan moyen sur Lew : le mot que tout le monde emploie', 'Plan à deux : la question qui sépare les deux', 'Gros plan zoom lent : la définition en une phrase'],
     environment: 'ai-lab',
     format: 'reel',
     cast: [lew('center'), ceo('right')],
     duration: 22,
     tags: ['explainer', 'concepts'],
     script: `CAMERA: medium Lew
-Lew looks at the camera.
-LEW: "Everyone says 'agent'. Almost nobody means the same thing."
+Lew regarde la caméra.
+LEW: "Tout le monde dit « agent ». Presque personne ne parle de la même chose."
 
 CAMERA: two-shot Lew CEO
-CEO: "So what is one?"
+CEO: "C'est quoi, alors ?"
 
 CAMERA: medium Lew
-LEW: "A chatbot answers. An agent decides what to do next, uses tools, and checks its own work."
+LEW: "Un chatbot répond. Un agent décide de la suite, utilise des outils, et vérifie son propre travail."
 
 CAMERA: close-up CEO
-CEO looks confused.
-CEO: "Checks its own work?"
+Le CEO a l'air perdu.
+CEO: "Il vérifie son propre travail ?"
 
 CAMERA: close-up Lew slow-push
-LEW (deadpan): "Yes. That's the part nobody demos."
+LEW (impassible): "Oui. C'est la partie que personne ne montre en démo."
 `
   }
 ]

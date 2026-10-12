@@ -53,6 +53,9 @@ const exportPercent = computed(() => (exporting.value.total ? Math.round((export
         <span class="hud" :title="`${ms.toFixed(2)} ms per frame`">
           <b>{{ fps ? fps.toFixed(0) : '–' }}</b> fps <i>{{ ms.toFixed(1) }} ms</i>
         </span>
+        <button class="ghost icon-only" :title="studio.audio.muted.value ? 'Unmute' : 'Mute preview audio'" :aria-pressed="studio.audio.muted.value" @click="studio.audio.toggleMute()">
+          <Icon :name="studio.audio.muted.value ? 'mute' : studio.audio.mixing.value ? 'mixing' : 'sound'" />
+        </button>
         <button class="ghost" title="Rebuild the timeline from the script" @click="studio.compile()"><Icon name="refresh" /> Compile</button>
         <div class="menu" @click.stop>
           <button class="primary" :aria-expanded="exportOpen" @click="exportOpen = !exportOpen"><Icon name="video" /> Render</button>
@@ -92,6 +95,7 @@ const exportPercent = computed(() => (exporting.value.total ? Math.round((export
                 time = t
                 fps = f
                 ms = m
+                if (playing && !p) studio.audio.stop()
                 playing = p
                 if (p) studio.camera.value = cameraAt(scene, t)
               }

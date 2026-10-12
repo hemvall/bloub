@@ -2,37 +2,38 @@ import { ContentStudio } from './api'
 import type { ContentProject } from './project'
 /** The benchmark project: every architectural decision is checked against this reel. */
 export const CHATBOT_VS_AGENT_SCRIPT = `CAMERA: two-shot Lew CEO
-CEO (confused): "We already have ChatGPT."
+CEO (perdu): "On a déjà ChatGPT."
 
-Lew looks at CEO.
+Lew regarde le CEO.
 CAMERA: medium Lew
-LEW (deadpan): "Does it know what's happening in your CRM?"
+LEW (impassible): "Il sait ce qui se passe dans votre CRM ?"
 
 CAMERA: close-up CEO
-CEO: "No."
+CEO: "Non."
 
 CAMERA: medium Lew
-LEW: "Can it update it?"
+LEW: "Il peut le mettre à jour ?"
 
 CAMERA: close-up CEO
-CEO looks away.
-CEO: "No."
+Le CEO détourne le regard.
+CEO: "Non."
 
 CAMERA: close-up Lew slow-push
-LEW (smug): "Then you have a chatbot."
+LEW (narquois): "Alors vous avez un chatbot."
 
 PAUSE 0.5
 
-LEW: "Not an employee."
+LEW: "Pas un employé."
 `
 export function chatbotVsAgent(id = 'demo-chatbot-vs-agent', now = '2026-10-12T00:00:00.000Z'): ContentProject {
   const studio = ContentStudio.create({
     id,
     now,
     title: 'Chatbot vs Agent',
-    topic: 'Why a chatbot is not an agent',
-    hook: 'CEO: We already have ChatGPT.',
-    cta: 'Build agents that actually work.',
+    topic: "Pourquoi un chatbot n'est pas un agent",
+    hook: 'CEO : On a déjà ChatGPT.',
+    cta: 'Des agents qui travaillent vraiment.',
+    language: 'fr',
     format: 'reel',
     environment: 'office-night',
     template: 'misconception',

@@ -9,18 +9,31 @@ import { OUTPUT_FORMATS, OUTPUT_PRESETS, type OutputFormat } from '@/studio/rend
 import { PROJECT_STATUSES, type ProjectStatus } from '@/studio/content/project'
 import { SUBTITLE_PRESETS } from '@/studio/subtitles/style'
 import type { CharacterKind, EnvironmentId } from '@/studio/scene/model'
+import { MUSIC_LABELS, MUSIC_TRACKS, TTS_PROVIDERS, type ContentLanguage, type MusicTrack, type TtsProvider } from '@/studio/audio/plan'
+import { DEFAULT_MODELS, OPENAI_VOICES, VOICE_DEFAULTS } from '@/studio/audio/tts'
 const props = defineProps<{ studio: StudioDocument }>()
-const { project, scene, scriptWarnings, plan } = props.studio
-const draft = ref(printScript(project.value))
-const dirty = computed(() => draft.value.trim() !== printScript(project.value).trim())
+const { project, scene, scriptWarnings, plan, audio } = props.studio
+const { keys, voiceProgress, voicedLines, mixing, missing } = audio
+const musicFile = ref<HTMLInputElement>()
+function num(ev: Event) {
+  return Number((ev.target as HTMLInputElement).value)
+}
+function voiceOf(role: string, kind: CharacterKind) {
+  return project.value.voice.voices[role] || (project.value.voice.provider === 'openai' ? VOICE_DEFAULTS[kind].openai : '')
+}
+function instructionsOf(role: string, kind: CharacterKind) {
+  return project.value.voice.instructions[role] ?? VOICE_DEFAULTS[kind].instructions[project.value.voice.language]
+}
+const printed = computed(() => printScript(project.value, project.value.voice.language))
+const draft = ref(printed.value)
+const dirty = computed(() => draft.value.trim() !== printed.value.trim())
 const help = ref(false)
 const addOpen = ref(false)
-const printed = computed(() => printScript(project.value))
 watch(printed, (text) => {
   if (!dirty.value || !draft.value.trim()) draft.value = text
 })
 watch(() => project.value.id, () => {
-  draft.value = printScript(project.value)
+  draft.value = printed.value
 })
 const marks = computed(() => Object.keys(ENVIRONMENTS[project.value.environment].marks))
 const words = computed(() => project.value.dialogue.reduce((n, d) => n + d.text.split(/\s+/).length, 0))
@@ -28,7 +41,7 @@ function apply() {
   props.studio.applyScriptText(draft.value)
 }
 function reset() {
-  draft.value = printScript(project.value)
+  draft.value = printed.value
 }
 function subtitlePreset(ev: Event) {
   const id = (ev.target as HTMLSelectElement).value
@@ -99,7 +112,7 @@ function kindLabel(kind: CharacterKind) {
       </span>
     </h4>
     <pre v-if="help" class="script-help">{{ SCRIPT_HELP }}</pre>
-    <textarea v-model="draft" class="script-text" rows="18" spellcheck="false" aria-label="Script" placeholder="CAMERA: two-shot Lew CEO&#10;CEO (confused): &quot;We already have ChatGPT.&quot;" />
+    <textarea v-model="draft" class="script-text" rows="18" spellcheck="false" aria-label="Script" placeholder="CAMERA: two-shot Lew CEO&#10;CEO (perdu): &quot;On a déjà ChatGPT.&quot;" />
     <div class="script-actions">
       <button class="primary" :disabled="!draft.trim()" @click="apply"><Icon name="refresh" /> {{ dirty ? 'Apply & compile' : 'Recompile' }}</button>
       <button v-if="dirty" class="ghost" @click="reset">Revert</button>
@@ -122,10 +135,92 @@ function kindLabel(kind: CharacterKind) {
         <input type="checkbox" :checked="scene.subtitles.enabled" @change="studio.edit((c) => c.setSubtitles({ enabled: ($event.target as HTMLInputElement).checked }))" />
       </label>
     </div>
+    <h4>Voice <small>{{ voicedLines }}/{{ project.dialogue.length }} lines voiced</small></h4>
+    <div class="two">
+      <label class="field-col">
+        Provider
+        <select :value="project.voice.provider" @change="studio.editProject((s) => s.setVoice({ provider: ($event.target as HTMLSelectElement).value as TtsProvider, model: DEFAULT_MODELS[($event.target as HTMLSelectElement).value as TtsProvider] }))">
+          <option v-for="p in TTS_PROVIDERS" :key="p" :value="p">{{ p === 'none' ? 'None (silent)' : p === 'openai' ? 'OpenAI TTS' : 'ElevenLabs' }}</option>
+        </select>
+      </label>
+      <label class="field-col">
+        Language
+        <select :value="project.voice.language" @change="studio.editProject((s) => s.setVoice({ language: ($event.target as HTMLSelectElement).value as ContentLanguage }))">
+          <option value="fr">Français</option>
+          <option value="en">English</option>
+        </select>
+      </label>
+    </div>
+    <template v-if="project.voice.provider !== 'none'">
+      <label class="field-col">
+        {{ project.voice.provider === 'openai' ? 'OpenAI' : 'ElevenLabs' }} API key
+        <input v-if="project.voice.provider === 'openai'" v-model="keys.openai" type="password" placeholder="sk-…" autocomplete="off" spellcheck="false" />
+        <input v-else v-model="keys.elevenlabs" type="password" placeholder="xi-…" autocomplete="off" spellcheck="false" />
+      </label>
+      <label class="field-col">
+        Model
+        <input :value="project.voice.model || DEFAULT_MODELS[project.voice.provider]" spellcheck="false" @change="studio.editProject((s) => s.setVoice({ model: ($event.target as HTMLInputElement).value.trim() }))" />
+      </label>
+      <div v-for="m in project.cast" :key="m.role" class="voice-row">
+        <span class="dot" :style="{ background: CHARACTERS[m.kind].color }" />
+        <span class="voice-name">{{ m.name }}</span>
+        <input
+          :value="voiceOf(m.role, m.kind)"
+          :list="project.voice.provider === 'openai' ? 'openai-voices' : undefined"
+          :placeholder="project.voice.provider === 'openai' ? 'voice' : 'voice id'"
+          spellcheck="false"
+          :aria-label="`Voice of ${m.name}`"
+          @change="studio.editProject((s) => s.setVoice({ voices: { [m.role]: ($event.target as HTMLInputElement).value.trim() } }))"
+        />
+        <input
+          v-if="project.voice.provider === 'openai'"
+          class="voice-notes"
+          :value="instructionsOf(m.role, m.kind)"
+          :aria-label="`Delivery of ${m.name}`"
+          placeholder="delivery notes"
+          @change="studio.editProject((s) => s.setVoice({ instructions: { [m.role]: ($event.target as HTMLInputElement).value } }))"
+        />
+      </div>
+      <datalist id="openai-voices"><option v-for="v in OPENAI_VOICES" :key="v" :value="v" /></datalist>
+      <div class="script-actions">
+        <button v-if="voiceProgress.running" class="ghost" @click="audio.cancelVoices()"><Icon name="stop" /> Cancel</button>
+        <button v-else class="primary" :disabled="!audio.providerKey.value || !project.dialogue.length" @click="audio.generateVoices()"><Icon name="mic" /> Generate voices</button>
+        <button class="ghost" :disabled="voiceProgress.running || !voicedLines" title="Synthesise every line again" @click="audio.generateVoices(true)">Redo all</button>
+        <button class="ghost" :disabled="voiceProgress.running || !voicedLines" @click="audio.clearVoices()">Remove</button>
+      </div>
+      <p v-if="voiceProgress.running" class="note">{{ voiceProgress.done }}/{{ voiceProgress.total }} · {{ voiceProgress.current }}</p>
+      <p class="note">The key stays in this browser and goes only to the provider. Clips are stored locally under a content hash; a line is synthesised once per text and voice. Each clip sets its line's length and slides the beats after it.</p>
+    </template>
+    <p v-else class="note">Without a provider the lines are timed by reading speed and the mouth is animated by a rhythm, not by a voice.</p>
+    <h4>Sound <small v-if="mixing">mixing…</small></h4>
+    <label class="field-col">
+      Music
+      <select :value="project.audio.music.track" @change="studio.editProject((s) => s.setAudio({ music: { track: ($event.target as HTMLSelectElement).value as MusicTrack, volume: s.project.audio.music.volume } }))">
+        <option v-for="t in MUSIC_TRACKS" :key="t" :value="t" :disabled="t === 'custom' && !project.audio.music.custom">{{ MUSIC_LABELS[t] }}{{ t === 'custom' && project.audio.music.custom ? ` · ${project.audio.music.custom.name}` : '' }}</option>
+      </select>
+    </label>
+    <div class="script-actions">
+      <button class="ghost" @click="musicFile?.click()"><Icon name="music" /> Import a track</button>
+      <input ref="musicFile" type="file" accept="audio/*" hidden @change="($event.target as HTMLInputElement).files?.[0] && audio.importMusicFile(($event.target as HTMLInputElement).files![0]!)" />
+      <span class="dim">MP3, WAV, OGG · stored locally</span>
+    </div>
+    <label class="field-row">Music level <input type="range" min="0" max="1" step="0.05" :value="project.audio.music.volume" @change="studio.editProject((s) => s.setAudio({ music: { track: s.project.audio.music.track, volume: num($event) } }))" /><span class="unit">{{ project.audio.music.volume.toFixed(2) }}</span></label>
+    <label class="field-row">Ducking under voice <input type="range" min="0" max="1" step="0.05" :value="project.audio.ducking" @change="studio.editProject((s) => s.setAudio({ ducking: num($event) }))" /><span class="unit">{{ project.audio.ducking.toFixed(2) }}</span></label>
+    <label class="field-row check">Room tone of the set <input type="checkbox" :checked="project.audio.ambience.enabled" @change="studio.editProject((s) => s.setAudio({ ambience: { enabled: ($event.target as HTMLInputElement).checked, volume: s.project.audio.ambience.volume } }))" /></label>
+    <label class="field-row">Ambience level <input type="range" min="0" max="1" step="0.05" :value="project.audio.ambience.volume" @change="studio.editProject((s) => s.setAudio({ ambience: { enabled: s.project.audio.ambience.enabled, volume: num($event) } }))" /><span class="unit">{{ project.audio.ambience.volume.toFixed(2) }}</span></label>
+    <div class="chips">
+      <button class="chip" :class="{ active: project.audio.sfx.cuts }" @click="studio.editProject((s) => s.setAudio({ sfx: { ...s.project.audio.sfx, cuts: !s.project.audio.sfx.cuts } }))">Whoosh on cuts</button>
+      <button class="chip" :class="{ active: project.audio.sfx.punchline }" @click="studio.editProject((s) => s.setAudio({ sfx: { ...s.project.audio.sfx, punchline: !s.project.audio.sfx.punchline } }))">Riser + hit on the punchline</button>
+      <button class="chip" :class="{ active: project.audio.sfx.captions }" @click="studio.editProject((s) => s.setAudio({ sfx: { ...s.project.audio.sfx, captions: !s.project.audio.sfx.captions } }))">Tick per caption</button>
+    </div>
+    <label class="field-row">SFX level <input type="range" min="0" max="1" step="0.05" :value="project.audio.sfx.volume" @change="studio.editProject((s) => s.setAudio({ sfx: { ...s.project.audio.sfx, volume: num($event) } }))" /><span class="unit">{{ project.audio.sfx.volume.toFixed(2) }}</span></label>
+    <ul v-if="missing.length" class="warnings">
+      <li v-for="m in missing" :key="m">Missing locally: {{ m }} (regenerate or re-import)</li>
+    </ul>
     <h4>Render</h4>
     <p class="note">
       {{ plan.preset.name }} · {{ plan.preset.width }}×{{ plan.preset.height }} · {{ plan.preset.fps }} fps · {{ plan.frames }} frames<br />
-      Video <b class="ok">ready</b> · subtitles <b class="ok">burned in</b> · audio <b class="warn">none</b>: {{ plan.audio.note }}
+      Video <b class="ok">ready</b> · subtitles <b class="ok">burned in</b> · audio <b :class="plan.audio.ready ? 'ok' : 'warn'">{{ plan.audio.ready ? 'ready' : 'silent' }}</b>: {{ plan.audio.note }}
     </p>
   </div>
 </template>

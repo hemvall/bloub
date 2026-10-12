@@ -6,7 +6,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js'
 import type { CameraPose, EnvironmentId, SceneData, Vec3 } from '../scene/model'
-import { cameraAt, characterAt, eyesOf, faceAt, speakingAt } from '../timeline/evaluate'
+import { cameraAt, characterAt, eyesOf, faceAt, speechLevelAt } from '../timeline/evaluate'
 import { gazeAt } from '../animation/gaze'
 import { actionsAt } from '../animation/actions'
 import { createCharacter, type CharacterRig } from '../characters'
@@ -284,7 +284,7 @@ export class SceneEngine {
         gaze: gazeAt(gazeScene, c, t, this.resolveTarget),
         face: faceAt(scene, c, t),
         action: actionsAt(scene.timeline, c.id, t),
-        speaking: speakingAt(scene, c.id, t),
+        speaking: speechLevelAt(scene, c.id, t),
         idle: idleProfile(CHARACTERS[c.kind].personality)
       })
     })

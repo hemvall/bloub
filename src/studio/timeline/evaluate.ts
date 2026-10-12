@@ -1,4 +1,4 @@
-import type { CameraPose, CharacterData, SceneData, TimelineEvent, Vec3 } from '../scene/model'
+import { ENVELOPE_RATE, type CameraPose, type CharacterData, type SceneData, type TimelineEvent, type Vec3 } from '../scene/model'
 import { CHARACTERS } from '../characters/catalog'
 import { FACES, mixFaces, type FaceParams } from '../animation/expressions'
 import type { Subject } from '../camera/presets'
@@ -124,6 +124,23 @@ export function speakingAt(scene: SceneData, character: string, time: number) {
       time >= e.time &&
       time < e.time + e.duration
   )
+}
+/**
+ * How loud the character is at `time`: 0 when silent, the clip's envelope when a
+ * voice was generated, 1 when a line is timed by reading speed (the rig then
+ * fakes the mouth). Linear between envelope samples so the mouth never steps.
+ */
+export function speechLevelAt(scene: SceneData, character: string, time: number) {
+  for (const e of scene.timeline) {
+    if (e.type !== 'dialogue' || e.character !== character || time < e.time || time >= e.time + e.duration) continue
+    if (!e.envelope?.length) return 1
+    const x = (time - e.time) * ENVELOPE_RATE
+    const i = Math.min(e.envelope.length - 1, Math.floor(x))
+    const a = e.envelope[i] ?? 0,
+      b = e.envelope[Math.min(e.envelope.length - 1, i + 1)] ?? a
+    return a + (b - a) * (x - i)
+  }
+  return 0
 }
 export function eyeHeight(character: CharacterData) {
   return CHARACTERS[character.kind].eyeHeight * character.scale

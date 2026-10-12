@@ -7,6 +7,8 @@ import { emptyScene } from '../scene/examples'
 import { validateScene, record, text, number, one, list, vec, color } from '../serialization/scene'
 import { isScreenId, isScreenImage } from '../props/screens'
 import { isActingCommand, type ActingCommand } from './acting'
+import { DEFAULT_AUDIO, DEFAULT_VOICE, MUSIC_TRACKS, TTS_PROVIDERS, type AudioConfig, type LineAudio, type VoiceConfig } from '../audio/plan'
+export type { AudioConfig, LineAudio, VoiceConfig } from '../audio/plan'
 /**
  * A content project: everything a reel is made of, above the scene document.
  * Dialogue, shots and cues are the source; `scene` is what the compiler made
@@ -29,6 +31,8 @@ export interface DialogueLine {
   start: number
   duration: number
   emotion?: Expression
+  /** Set once a voice clip exists for this text and voice; the duration then follows the clip. */
+  audio?: LineAudio
 }
 export interface Shot {
   id: string
@@ -47,12 +51,6 @@ export interface ActingCue {
   actor: string
   command: ActingCommand
   target?: string
-}
-export interface VoiceConfig {
-  /** Only `none` exists today: lines are timed by reading speed and the render is silent. */
-  provider: 'none'
-  language: string
-  voices: Record<string, string>
 }
 export interface ProjectMeta {
   createdAt: string
@@ -83,6 +81,7 @@ export interface ContentProject {
   /** Explicit length in seconds; otherwise the last beat plus a short tail. */
   duration?: number
   voice: VoiceConfig
+  audio: AudioConfig
   scene: SceneData
   metadata: ProjectMeta
 }
@@ -92,6 +91,7 @@ export interface CreateOptions {
   topic?: string
   hook?: string
   cta?: string
+  language?: VoiceConfig['language']
   format?: OutputFormat
   environment?: EnvironmentId
   template?: string
@@ -128,7 +128,8 @@ export function createProject(options: CreateOptions = {}): ContentProject {
     dialogue: [],
     shots: [],
     cues: [],
-    voice: { provider: 'none', language: 'en', voices: {} },
+    voice: { ...structuredClone(DEFAULT_VOICE), language: options.language ?? 'fr' },
+    audio: structuredClone(DEFAULT_AUDIO),
     scene,
     metadata: { createdAt: now, updatedAt: now, tags: [], notes: '' }
   }
@@ -195,6 +196,12 @@ export function validateProject(input: unknown): ContentProject {
     number(d.start, 0, 600, 'line start')
     number(d.duration, 0.2, 60, 'line duration')
     if (d.emotion !== undefined) one(d.emotion, EXPRESSIONS, 'emotion')
+    if (d.audio !== undefined) {
+      const a = record(d.audio, 'line audio')
+      text(a.hash, 'clip hash', 80)
+      number(a.duration, 0.1, 60, 'clip duration')
+      list(a.envelope, 3000, 'envelope').forEach((v) => number(v, 0, 1, 'envelope sample'))
+    }
   }
   for (const item of list(p.shots, 100, 'shots')) {
     const s = record(item, 'shot')
@@ -214,10 +221,35 @@ export function validateProject(input: unknown): ContentProject {
     if (!isActingCommand(String(c.command))) throw new Error(`Unknown acting command: ${String(c.command)}`)
     if (c.target !== undefined) text(c.target, 'cue target', 60)
   }
+  // Older projects carry no audio block: they get the defaults rather than a refusal.
+  if (p.voice === undefined) p.voice = structuredClone(DEFAULT_VOICE)
+  if (p.audio === undefined) p.audio = structuredClone(DEFAULT_AUDIO)
   const voice = record(p.voice, 'voice config')
-  one(voice.provider, ['none'] as const, 'voice provider')
-  text(voice.language, 'language', 10)
-  record(voice.voices, 'voices')
+  one(voice.provider, TTS_PROVIDERS, 'voice provider')
+  one(voice.language, ['fr', 'en'] as const, 'language')
+  if (voice.model === undefined) voice.model = ''
+  if (voice.instructions === undefined) voice.instructions = {}
+  text(voice.model, 'voice model', 80, true)
+  for (const v of Object.values(record(voice.voices, 'voices'))) text(v, 'voice id', 80, true)
+  for (const v of Object.values(record(voice.instructions, 'voice instructions'))) text(v, 'voice instructions', 400, true)
+  const audio = record(p.audio, 'audio config')
+  const music = record(audio.music, 'music')
+  one(music.track, MUSIC_TRACKS, 'music track')
+  number(music.volume, 0, 1, 'music volume')
+  if (music.custom !== undefined) {
+    const c = record(music.custom, 'custom music')
+    text(c.hash, 'music hash', 80)
+    text(c.name, 'music name', 120)
+    number(c.duration, 0.1, 3600, 'music duration')
+  }
+  const ambience = record(audio.ambience, 'ambience')
+  if (typeof ambience.enabled !== 'boolean') throw new Error('ambience.enabled must be a boolean')
+  number(ambience.volume, 0, 1, 'ambience volume')
+  const sfx = record(audio.sfx, 'sfx')
+  for (const k of ['cuts', 'punchline', 'captions'] as const) if (typeof sfx[k] !== 'boolean') throw new Error(`sfx.${k} must be a boolean`)
+  number(sfx.volume, 0, 1, 'sfx volume')
+  number(audio.ducking, 0, 1, 'ducking')
+  number(audio.voiceVolume, 0, 2, 'voice volume')
   const meta = record(p.metadata, 'metadata')
   text(meta.createdAt, 'createdAt', 40)
   text(meta.updatedAt, 'updatedAt', 40)

@@ -34,7 +34,8 @@ export interface CharacterFrame {
   gaze: Gaze
   face: FaceParams
   action: ActionPose
-  speaking: boolean
+  /** 0 silent, 1 full voice; fractional values come from a real clip's envelope. */
+  speaking: number
   idle?: IdleProfile
 }
 export class CharacterRig {
@@ -125,7 +126,9 @@ export class CharacterRig {
       eye.lid.position.y = eye.radius * (1.02 - lid * 1.15)
       eye.lid.rotation.z = side * face.lidTilt * 0.6
     })
-    const talk = frame.speaking ? (0.5 + 0.5 * Math.sin(frame.time * 21)) * (0.6 + 0.4 * Math.sin(frame.time * 7.3)) : 0
+    // With a real envelope the loudness shapes the mouth; the sine only adds the syllable texture.
+    const texture = 0.5 + 0.5 * Math.sin(frame.time * 21)
+    const talk = frame.speaking >= 1 ? texture * (0.6 + 0.4 * Math.sin(frame.time * 7.3)) : frame.speaking * (0.55 + 0.45 * texture)
     const open = Math.min(1, face.open + action.open + talk * 0.55)
     const smile = Math.max(-1, Math.min(1, face.smile + action.smile))
     const w = m.mouthWidth

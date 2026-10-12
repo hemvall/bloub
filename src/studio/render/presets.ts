@@ -31,16 +31,31 @@ export interface RenderPlan {
   seconds: number
   video: { ready: true; codec: 'avc'; note: string }
   subtitles: { ready: true; mode: 'burned-in'; note: string }
-  audio: { ready: false; note: string }
+  audio: { ready: boolean; voice: 'none' | 'partial' | 'full'; note: string }
 }
-export function renderPlan(format: OutputFormat, duration: number): RenderPlan {
+interface AudioFacts {
+  voice: { provider: string }
+  dialogue: { audio?: unknown }[]
+  audio: { music: { track: string }; ambience: { enabled: boolean }; sfx: { cuts: boolean; punchline: boolean; captions: boolean } }
+}
+export function renderPlan(format: OutputFormat, duration: number, project?: AudioFacts): RenderPlan {
   const preset = OUTPUT_PRESETS[format]
+  const voiced = project ? project.dialogue.filter((d) => d.audio).length : 0
+  const voice: RenderPlan['audio']['voice'] = !project || project.voice.provider === 'none' || !voiced ? 'none' : voiced < project.dialogue.length ? 'partial' : 'full'
+  const beds = project ? [project.audio.music.track !== 'none' && 'music', project.audio.ambience.enabled && 'ambience', (project.audio.sfx.cuts || project.audio.sfx.punchline || project.audio.sfx.captions) && 'sfx'].filter(Boolean) : []
+  const ready = voice !== 'none' || beds.length > 0
   return {
     preset,
     frames: Math.round(duration * preset.fps),
     seconds: duration,
     video: { ready: true, codec: 'avc', note: `Deterministic frames from engine.capture at ${preset.width}×${preset.height}, ${preset.fps} fps, encoded to H.264 MP4 in the browser.` },
     subtitles: { ready: true, mode: 'burned-in', note: 'Drawn by the same overlay as the preview; no separate caption file yet.' },
-    audio: { ready: false, note: 'No voice track: no TTS provider is wired in. The MP4 is silent; lines are timed by reading speed.' }
+    audio: {
+      ready,
+      voice,
+      note: !ready
+        ? 'Silent: no voice provider, no music, no ambience.'
+        : `AAC track mixed offline: ${[voice === 'full' ? 'voice on every line' : voice === 'partial' ? `voice on ${voiced}/${project!.dialogue.length} lines` : 'no voice', ...beds].join(', ')}.`
+    }
   }
 }

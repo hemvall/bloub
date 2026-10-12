@@ -193,6 +193,13 @@
 .menu-list button:hover {
   background: var(--bg3);
 }
+.menu-group {
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--dim);
+  padding: 8px 10px 3px;
+}
 .menu-list small {
   margin-left: auto;
   color: var(--dim);
@@ -1291,6 +1298,27 @@
 .note .warn {
   color: var(--warn);
   font-weight: 600;
+}
+.voice-row {
+  display: grid;
+  grid-template-columns: 9px 56px 1fr;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0;
+}
+.voice-row .voice-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.voice-row .voice-notes {
+  grid-column: 2 / 4;
+  color: var(--muted);
+  font-size: 11px;
+}
+.chip.active {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .lane .key.cut::before {
   content: '';

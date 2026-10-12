@@ -40,7 +40,9 @@ brief -(Claude, optional)-> project -> script text <-> beats -(compile)-> scene 
 ```
 
 - **Library** (`/studio`): every project with status (draft / ready / rendered), thumbnail,
-  length, format, cast; duplicate, delete, new from template, import. The command bar
+  length, format, cast; duplicate, delete, new from template or from one of the nine example
+  reels (`content/examples.ts`: Chatbot vs Agent, RAG, le lundi d'Ops, renommer une variable,
+  MCP, les evals, context engineering, l'agent commercial, POC en prod), import. The command bar
   ("Describe your video...") calls Claude with the user's own key and gets back a whole project in
   the script format; without a key it says so and templates work offline. Deep links:
   `#project=<id>`, `#template=<id>` (a fresh project), `&t=<seconds>`.
@@ -95,7 +97,10 @@ back instead of landing inside Lew's head, and a two-shot fits both bodies whate
 
 ### Characters and sets
 
-`lew` is the brand character (soft squared head, amber fin, half-lidded eyes); `ceo` and `dev`
+`lew` is the brand character: a low-poly raccoon built from faceted balls and cones, a black eye
+mask whose lids are mask-coloured (a half-lid reads as the mask's edge), pointed ears, a striped
+tail, an elongated body, palette from the brand sheet (`#6b6f7b` coat, `#ebe8ea`, `#3b4252`,
+`#0f0f14`). Silhouette, mask and eyes first; no fur, no detail. `ceo` and `dev`
 are archetypes reused under any role or name (a `client`, an `ops`, a `sales`). Each kind has a
 **personality** (`characters/catalog.ts`) that scales its idle and sets its reaction intensity.
 Sets built for the content: `office-night`, `meeting-room`, `ai-lab`; the original three remain.
@@ -110,18 +115,53 @@ in chunks with the spoken one in amber, inside the vertical safe zone. The style
 scene (`subtitles`), the Lew look is the default, a caption-box style is available. The same
 function draws the viewport and the export.
 
+### Audio (`audio/`)
+
+The sound is data first: `mixPlan(project)` is a pure list of what must sound and when (voice
+clips, duck windows, music, the set's room tone, SFX cues), and `renderMixSamples` turns it into
+samples with **plain-JS DSP** (`audio/dsp.ts`: oscillators, seeded noise, RBJ biquads, envelopes,
+a delay, a soft limiter). There is no Web Audio graph in the render path: Chrome's
+OfflineAudioContext stalled at random under a few hundred scheduled nodes, and samples computed
+by hand are the same in a vitest run, a tab and the exporter. **The preview plays that buffer and
+the exporter embeds it as AAC**, so they cannot differ. Rendering 20 s takes a few hundred
+milliseconds on the main thread; it is debounced.
+
+- **Voice.** Text to speech through the user's own key, from the browser: OpenAI (`gpt-4o-mini-tts`,
+  reads delivery notes per role) or ElevenLabs (`eleven_multilingual_v2`, needs a voice id per
+  role). Clips are stored in IndexedDB under a content hash (provider, model, voice, language,
+  notes, text); the project keeps only the hash, the clip's duration and a 25 Hz loudness
+  envelope. **Attaching a clip re-times the beats**: the line takes the clip's length and every
+  later line, shot and cue slides by the difference. The envelope drives the mouth
+  (`speechLevelAt`); without a clip the rig falls back to its rhythm. Without a provider the
+  render is silent on the voice side, and says so.
+- **Music.** Three procedural, royalty-free beds (lo-fi beat, synth pulse, ambient pad) rendered
+  from a fixed seed, or an imported file (stored locally, looped if shorter). Music ducks under
+  voice windows (`ducking`).
+- **Room tone** per set: city hum for the office, HVAC for the meeting room, a drone and blips
+  for the lab, rain and murmur for the bar, wind on the rooftop.
+- **SFX**: a whoosh on every cut, a riser into the last line and a hit on it, an optional tick per
+  caption chunk. All switchable and levelled in the project's `audio` block.
+
+### Language
+
+The content is French first: the demo, the templates and the generator write French; the
+parser reads French and English alike (shot names, stage directions, emotions, with or without
+accents, straight or typographic quotes) and the printer writes stage directions in the
+project's language (`voice.language`). The UI stays in English.
+
 ### Render
 
 `render/presets.ts` lists the targets (Reel, TikTok, Short at 1080x1920 60 fps, Landscape at
-1920x1080) and `renderPlan` says plainly what exists: deterministic frames and burned-in
-subtitles are real; **there is no audio track** because no TTS provider is wired in. The MP4
-is silent, lines are timed by reading speed.
+1920x1080) and `renderPlan` says plainly what the MP4 will contain: deterministic frames,
+burned-in subtitles, and an AAC track when there is anything to hear (voice, music, room
+tone or SFX), silent otherwise.
 
 ## Architecture
 
 ```
 src/studio/
-  content/        project model, script format, acting, conversation pass, compiler, templates, demo, API, Claude generator
+  content/        project model, script format (fr/en), acting, conversation pass, compiler, templates, demo, API, Claude generator
+  audio/          mix plan, procedural music, room tone, SFX, offline mix, TTS providers, clip store, preview player
   render/         output presets and the render plan
   subtitles/      word timing, styles, drawing
   scene/          model (v3 types), commands, examples
@@ -187,13 +227,13 @@ place. The Anthropic SDK (`~60 kB gzip`) and mediabunny are dynamic imports, loa
 
 ## What remains for a complete, published reel
 
-- **Voice.** No TTS; the render is silent and lines are timed by reading speed. Wiring a
-  provider means: `voice.provider`, one audio clip per line, line durations taken from the
-  clips, lip timing from their envelope, and an audio track in `export/video.ts`.
+- **Voice quality.** Clips come from a provider with the user's key; there is no local TTS, so
+  without a key the reel stays silent on the voice side. Lip sync follows loudness, not phonemes.
+- **Music.** The procedural beds are placeholders with a pulse; a real soundtrack is an imported
+  file. Nothing is licensed or fetched.
 - **Caption file.** Subtitles are burned in only; an `.srt` from `wordTimings` is a small step.
 - **Headless batch render.** `engine.capture` is already DOM-light; a server renderer needs a
-  WebGL context (Playwright or headless Chrome, which is how the screenshots in this doc were
-  taken).
+  WebGL context and an OfflineAudioContext (headless Chrome has both).
 - **Publishing.** Nothing talks to Instagram, TikTok or YouTube. Rendered MP4s download.
 - **Agent loop.** `ContentStudio` is callable from anywhere; the chat director still edits the
   scene, not the project. A director op set over the project (add a line, re-cut, re-time) is the

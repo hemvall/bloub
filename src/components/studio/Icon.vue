@@ -37,7 +37,12 @@ const PATHS: Record<string, string> = {
   film: 'M3 5h18v14H3zM3 9h18M3 15h18M8 5v14M16 5v14',
   wand: 'M4 20l10-10M14 4l1 2 2 1-2 1-1 2-1-2-2-1 2-1zM19 11l.6 1.4L21 13l-1.4.6L19 15l-.6-1.4L17 13l1.4-.6z',
   refresh: 'M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5',
-  reel: 'M7 4h10v16H7zM7 8h10M7 12h10M7 16h10'
+  reel: 'M7 4h10v16H7zM7 8h10M7 12h10M7 16h10',
+  sound: 'M4 10v4h4l5 4V6L8 10zM16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11',
+  mute: 'M4 10v4h4l5 4V6L8 10zM16 9l5 6M21 9l-5 6',
+  mixing: 'M4 10v4h4l5 4V6L8 10zM16 12h5',
+  mic: 'M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3M6 11a6 6 0 0 0 12 0M12 17v4M9 21h6',
+  music: 'M9 18a2 2 0 1 1-4 0 2 2 0 0 1 4 0M19 16a2 2 0 1 1-4 0 2 2 0 0 1 4 0M9 18V5l10-2v13M9 9l10-2'
 }
 defineProps<{ name: keyof typeof PATHS | string; size?: number }>()
 </script>

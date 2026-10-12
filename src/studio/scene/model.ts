@@ -117,7 +117,14 @@ export type TimelineEvent =
   | (EventBase & { type: 'position'; character: string; position: Vec3 })
   | (EventBase & { type: 'gaze'; character: string; target: GazeTarget })
   | (EventBase & { type: 'expression'; character: string; expression: Expression })
-  | (EventBase & { type: 'dialogue'; character: string; text: string; duration: number })
+  | (EventBase & {
+      type: 'dialogue'
+      character: string
+      text: string
+      duration: number
+      /** Loudness of the voice clip at `ENVELOPE_RATE` samples per second, 0..1; drives the mouth when present. */
+      envelope?: number[]
+    })
   | (EventBase & { type: 'action'; character: string; action: ActionId })
 export type EventType = TimelineEvent['type']
 export interface SceneData {
@@ -178,6 +185,8 @@ export const PROP_KINDS: PropKind[] = [
   'documents',
   'server'
 ]
+/** Samples per second of a dialogue envelope. */
+export const ENVELOPE_RATE = 25
 export const EVENT_TYPES: EventType[] = ['camera', 'position', 'gaze', 'expression', 'dialogue', 'action']
 /** Export sizes per format; 1080 on the short side is the short-form standard. */
 export const OUTPUT_SIZE: Record<Aspect, [number, number]> = {

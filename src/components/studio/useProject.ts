@@ -1,6 +1,6 @@
 import { validateScene } from '@/studio/serialization/scene'
 import { projectFromScene, serializeProject, validateProject, type ContentProject } from '@/studio/content/project'
-import { chatbotVsAgent } from '@/studio/content/demo'
+import { exampleProjects } from '@/studio/content/examples'
 /** Browser storage of the content library: a list of projects, validated on the way in. */
 const KEY = 'bloub-studio-library-v1'
 const LEGACY_KEYS = ['bloub-studio-project-v2', 'bloub-scene-v1']
@@ -26,7 +26,7 @@ export function loadLibrary(): { projects: ContentProject[]; active: string } {
   } catch {
     /* storage is optional */
   }
-  const projects: ContentProject[] = [chatbotVsAgent()]
+  const projects: ContentProject[] = exampleProjects()
   // Scenes saved by the previous studio become script-less projects.
   for (const key of LEGACY_KEYS)
     try {

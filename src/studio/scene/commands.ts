@@ -159,7 +159,7 @@ export class SceneCommands {
       this.key({ id: uid('k'), type: 'expression', character: id, expression, time })
     }
   }
-  say(id: string, text: string, time: number, duration = readingTime(text)) {
+  say(id: string, text: string, time: number, duration = readingTime(text), envelope?: number[]) {
     this.character(id)
     const event: TimelineEvent = {
       id: uid('k'),
@@ -167,7 +167,8 @@ export class SceneCommands {
       character: id,
       text: text.trim(),
       time,
-      duration
+      duration,
+      ...(envelope?.length && { envelope: [...envelope] })
     }
     this.key(event)
     return event

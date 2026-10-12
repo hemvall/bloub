@@ -5,6 +5,7 @@ import { compileProject, projectDuration } from './compile'
 import { parseScript, printScript } from './script'
 import { parseProject, serializeProject, validateProject, createProject, castMember } from './project'
 import { TEMPLATES } from './templates'
+import { EXAMPLE_REELS, buildExample, exampleProjects } from './examples'
 import { conversationBeats } from './conversation'
 import { projectFromGeneration, PROJECT_SCHEMA } from './generate'
 import { ACTING, ACTING_COMMANDS } from './acting'
@@ -15,13 +16,21 @@ import { shotPoses } from '../camera/shots'
 import { OUTPUT_PRESETS } from '../render/presets'
 import { ENVIRONMENTS, ENVIRONMENT_IDS } from '../environments/catalog'
 import { CHARACTERS, CHARACTER_KINDS, idleProfile } from '../characters/catalog'
+import { envelopeOf, mixPlan, DEFAULT_AUDIO, DEFAULT_VOICE } from '../audio/plan'
+import { renderMixSamples } from '../audio/mix'
+import { renderMusic } from '../audio/music'
+import { renderAmbience } from '../audio/ambience'
+import { peak, track } from '../audio/dsp'
+import { ENVIRONMENT_IDS as SETS } from '../environments/catalog'
+import { speechLevelAt } from '../timeline/evaluate'
+import { ENVELOPE_RATE } from '../scene/model'
 const cast = [castMember('lew', { mark: 'desk' }), castMember('ceo', { mark: 'guest' })]
 describe('script format', () => {
   it('reads the benchmark script into lines, shots and cues', () => {
     const s = parseScript(CHATBOT_VS_AGENT_SCRIPT, cast)
     expect(s.warnings).toEqual([])
     expect(s.dialogue.map((d) => d.speaker)).toEqual(['ceo', 'lew', 'ceo', 'lew', 'ceo', 'lew', 'lew'])
-    expect(s.dialogue[0]).toMatchObject({ text: 'We already have ChatGPT.', start: 0, emotion: 'confused' })
+    expect(s.dialogue[0]).toMatchObject({ text: 'On a déjà ChatGPT.', start: 0, emotion: 'confused' })
     expect(s.shots.map((x) => `${x.type}:${x.target}:${x.movement}`)).toEqual([
       'two-shot:lew:static',
       'medium:lew:static',
@@ -62,16 +71,35 @@ describe('script format', () => {
     expect(second.dialogue).toEqual(first.dialogue)
     expect(second.shots).toEqual(first.shots)
     expect(second.cues).toEqual(first.cues)
-    expect(text).toContain('LEW (deadpan): "Does it know')
+    expect(text).toContain('LEW (impassible): "Il sait')
+    expect(text).toContain('CEO détourne le regard.')
     expect(text).toContain('CAMERA: close-up Lew slow-push')
+    const english = printScript({ cast, ...first }, 'en')
+    expect(english).toContain('LEW (deadpan): "Il sait')
+    expect(english).toContain('CEO looks away.')
+    expect(parseScript(english, cast).cues).toEqual(first.cues)
   })
-  it('round trips every acting command through prose', () => {
-    for (const command of ACTING_COMMANDS) {
-      const cue = { id: 'c-1', time: 0, actor: 'lew', command, ...(ACTING[command].gaze === 'target' && { target: 'ceo' }) }
-      const text = printScript({ cast, dialogue: [], shots: [], cues: [cue] })
-      const back = parseScript(text, cast)
-      expect(back.cues[0], text).toMatchObject({ command, actor: 'lew', ...(cue.target && { target: cue.target }) })
-    }
+  it('round trips every acting command through prose, in both languages', () => {
+    for (const language of ['fr', 'en'] as const)
+      for (const command of ACTING_COMMANDS) {
+        const cue = { id: 'c-1', time: 0, actor: 'lew', command, ...(ACTING[command].gaze === 'target' && { target: 'ceo' }) }
+        const text = printScript({ cast, dialogue: [], shots: [], cues: [cue] }, language)
+        const back = parseScript(text, cast)
+        expect(back.cues[0], text).toMatchObject({ command, actor: 'lew', ...(cue.target && { target: cue.target }) })
+      }
+  })
+  it('reads French shot names, accents, typographic quotes and camera looks', () => {
+    const s = parseScript(
+      `CAMÉRA : gros plan sur Lew, zoom lent\nLEW (agacé, 2s) : « C’est pas un agent. »\nLe CEO fronce les sourcils et regarde la caméra.\nCAMERA: plan à deux Lew CEO\nLa caméra se rapproche lentement de Lew.`,
+      cast
+    )
+    expect(s.warnings).toEqual([])
+    expect(s.shots[0]).toMatchObject({ type: 'close-up', target: 'lew', movement: 'slow-push' })
+    expect(s.dialogue[0]).toMatchObject({ speaker: 'lew', text: 'C’est pas un agent.', emotion: 'annoyed', duration: 2 })
+    expect(s.cues.map((c) => c.command)).toEqual(['lookAt', 'annoyed'])
+    expect(s.cues[0]).toMatchObject({ actor: 'ceo', target: 'camera' })
+    expect(s.shots[1]).toMatchObject({ type: 'two-shot', target: 'lew', other: 'ceo' })
+    expect(s.shots[2]).toMatchObject({ type: 'medium', target: 'lew', movement: 'slow-push' })
   })
 })
 describe('compiler', () => {
@@ -152,8 +180,8 @@ describe('studio api', () => {
     const result = studio.compileTimeline()
     expect(result.warnings).toEqual([])
     expect(studio.project.scene.props.some((p) => p.kind === 'phone' && p.screen === 'notification')).toBe(true)
-    expect(studio.script()).toContain('DEV (tired): "It renamed one variable."')
-    expect(studio.script()).toContain('Lew smirks.')
+    expect(studio.script()).toContain('DEV (fatigué): "It renamed one variable."')
+    expect(studio.script()).toContain('Lew a un sourire en coin.')
     const again = ContentStudio.fromJSON(studio.toJSON())
     expect(again.project).toEqual(studio.project)
   })
@@ -176,6 +204,25 @@ describe('studio api', () => {
       expect(result.scene.duration, t.id).toBeLessThan(40)
       expect(result.scene.timeline.filter((e) => e.type === 'camera' && e.cut).length, t.id).toBeGreaterThan(1)
     }
+  })
+  it('ships every example reel parsed clean, compiled clean, 12 to 35 seconds, in French', () => {
+    const ids = new Set<string>()
+    for (const reel of EXAMPLE_REELS) {
+      const studio = new ContentStudio(buildExample(reel))
+      expect(ids.has(reel.id), reel.id).toBe(false)
+      ids.add(reel.id)
+      expect(studio.setScript(reel.script), reel.id).toEqual([])
+      const result = studio.compileTimeline()
+      expect(result.warnings, reel.id).toEqual([])
+      expect(result.scene.duration, reel.id).toBeGreaterThan(12)
+      expect(result.scene.duration, reel.id).toBeLessThan(35)
+      expect(studio.project.dialogue.length, reel.id).toBeGreaterThanOrEqual(5)
+      expect(result.scene.timeline.filter((e) => e.type === 'camera' && e.cut).length, reel.id).toBeGreaterThanOrEqual(3)
+      expect(studio.project.cast.some((c) => c.kind === 'lew'), reel.id).toBe(true)
+      expect(studio.project.voice.language).toBe('fr')
+      expect(() => validateProject(studio.project), reel.id).not.toThrow()
+    }
+    expect(exampleProjects('2026-01-01T00:00:00.000Z').map((p) => p.id)).toEqual(['demo-chatbot-vs-agent', ...EXAMPLE_REELS.map((r) => `example-${r.id}`)])
   })
   it('turns a model answer into a compiled project and tolerates bad values', () => {
     const generated = projectFromGeneration({
@@ -251,9 +298,129 @@ describe('shots, subtitles, personalities', () => {
     const overridden = conversationBeats(lines, cast, [{ id: 'c-1', time: 2.3, actor: 'ceo', command: 'lookAway' }])
     expect(overridden.some((b) => b.actor === 'ceo' && b.gaze && Math.abs(b.time - 2.3) < 0.6)).toBe(false)
   })
-  it('creates blank projects at the preset size', () => {
+  it('creates blank projects at the preset size, in French, with the default sound', () => {
     const p = createProject({ format: 'landscape', now: 'x' })
     expect(p.scene.aspect).toBe('16:9')
     expect(p.status).toBe('draft')
+    expect(p.voice.language).toBe('fr')
+    expect(p.audio.music.track).toBe('lofi')
+  })
+})
+describe('audio', () => {
+  const clip = (duration: number) => ({ hash: `h${duration}`, duration, envelope: [0.2, 0.9, 0.5, 0.1] })
+  it('attaching a voice re-times every later beat and clearing it restores reading speed', () => {
+    const studio = new ContentStudio(chatbotVsAgent())
+    const [first, second] = studio.project.dialogue
+    const shotAfter = studio.project.shots.find((s) => s.start > first!.start)!
+    const before = { second: second!.start, shot: shotAfter.start, duration: studio.project.scene.duration }
+    studio.attachVoice(first!.id, clip(first!.duration + 1.5))
+    expect(studio.project.dialogue[0]!.duration).toBeCloseTo(before.second - 0.3 + 1.5, 5)
+    expect(studio.project.dialogue[1]!.start).toBeCloseTo(before.second + 1.5, 5)
+    expect(studio.project.shots.find((s) => s.id === shotAfter.id)!.start).toBeCloseTo(before.shot + 1.5, 5)
+    const compiled = studio.compileTimeline()
+    expect(compiled.warnings).toEqual([])
+    expect(compiled.scene.duration).toBeCloseTo(before.duration + 1.5, 5)
+    const event = compiled.scene.timeline.find((e) => e.type === 'dialogue' && e.text === first!.text)!
+    expect(event.type === 'dialogue' && event.envelope).toEqual([0.2, 0.9, 0.5, 0.1])
+    expect(speechLevelAt(compiled.scene, 'ceo', event.time + 1 / ENVELOPE_RATE)).toBeCloseTo(0.9, 5)
+    expect(speechLevelAt(compiled.scene, 'ceo', event.time + 0.5 / ENVELOPE_RATE)).toBeCloseTo(0.55, 5)
+    expect(speechLevelAt(compiled.scene, 'lew', event.time + 0.1)).toBe(0)
+    studio.clearVoice()
+    expect(studio.project.dialogue[1]!.start).toBeCloseTo(before.second, 5)
+    expect(studio.project.dialogue[0]!.audio).toBeUndefined()
+  })
+  it('keeps a clip across a script edit when the line did not change', () => {
+    const studio = new ContentStudio(chatbotVsAgent())
+    const line = studio.project.dialogue[2]!
+    studio.attachVoice(line.id, clip(2))
+    studio.setScript(studio.script().replace('Pas un employé.', 'Pas un collègue.'))
+    expect(studio.project.dialogue.find((d) => d.text === line.text)!.audio?.hash).toBe('h2')
+    expect(studio.project.dialogue.find((d) => d.text === 'Pas un collègue.')!.audio).toBeUndefined()
+    expect(() => validateProject(studio.project)).not.toThrow()
+  })
+  it('plans the mix from the project: ducks under voices, whooshes on cuts, hits the punchline', () => {
+    const project = chatbotVsAgent()
+    const silent = mixPlan({ scene: project.scene, audio: project.audio, voice: project.voice, dialogue: project.dialogue })
+    expect(silent.voice).toEqual([])
+    expect(silent.ducks).toEqual([])
+    expect(silent.sfx.filter((s) => s.kind === 'whoosh').length).toBe(5)
+    const last = project.dialogue.at(-1)!
+    expect(silent.sfx.find((s) => s.kind === 'hit')!.time).toBeCloseTo(last.start, 5)
+    expect(silent.sfx.find((s) => s.kind === 'riser')!.time).toBeLessThan(last.start)
+    expect(silent.ambience).toEqual({ set: 'office-night', volume: DEFAULT_AUDIO.ambience.volume })
+    const studio = new ContentStudio(project)
+    studio.setVoice({ provider: 'openai' })
+    studio.attachVoice(project.dialogue[0]!.id, clip(2))
+    studio.attachVoice(project.dialogue[1]!.id, clip(3))
+    const voiced = mixPlan({ scene: studio.project.scene, audio: studio.project.audio, voice: studio.project.voice, dialogue: studio.project.dialogue })
+    expect(voiced.voice.map((v) => v.hash)).toEqual(['h2', 'h3'])
+    expect(voiced.ducks.length).toBe(1)
+    expect(voiced.ducks[0]!.end).toBeCloseTo(studio.project.dialogue[1]!.start + 3, 5)
+    const quiet = mixPlan({ scene: project.scene, audio: { ...project.audio, music: { track: 'none', volume: 0 }, ambience: { enabled: false, volume: 0 }, sfx: { ...project.audio.sfx, cuts: false, punchline: false } }, voice: DEFAULT_VOICE, dialogue: project.dialogue })
+    expect(quiet.sfx).toEqual([])
+    expect(quiet.ambience).toBeNull()
+  })
+  it('derives a peak-normalised envelope at the envelope rate', () => {
+    const rate = 1000
+    const samples = new Float32Array(rate)
+    for (let i = 0; i < rate; i++) samples[i] = i < 500 ? 0.5 * Math.sin(i) : 0.1 * Math.sin(i)
+    const env = envelopeOf(samples, rate)
+    expect(env.length).toBe(ENVELOPE_RATE)
+    expect(Math.max(...env)).toBe(1)
+    expect(env[2]).toBeGreaterThan(env[20]!)
+    expect(env.every((v) => v >= 0 && v <= 1)).toBe(true)
+  })
+  it('renders every music bed and room tone deterministically, in samples, without clipping', () => {
+    for (const kind of ['lofi', 'pulse', 'ambient'] as const) {
+      const a = track(4, 24000),
+        b = track(4, 24000)
+      renderMusic(a, kind, 4)
+      renderMusic(b, kind, 4)
+      expect(a.data, kind).toEqual(b.data)
+      expect(peak(a), kind).toBeGreaterThan(0.1)
+      expect(peak(a), kind).toBeLessThan(1.5)
+    }
+    for (const set of SETS) {
+      const t = track(3, 24000)
+      renderAmbience(t, set, 3)
+      expect(peak(t), set).toBeGreaterThan(0.005)
+      expect(peak(t), set).toBeLessThan(0.5)
+    }
+  })
+  it('mixes the demo: music under a voice is quieter than music beside it, hits land on the punchline', async () => {
+    const project = chatbotVsAgent()
+    const studio = new ContentStudio(project)
+    studio.setVoice({ provider: 'openai' })
+    const first = studio.project.dialogue[0]!
+    studio.attachVoice(first.id, { hash: 'tone', duration: 2, envelope: [1] })
+    studio.compileTimeline()
+    const plan = mixPlan({ scene: studio.project.scene, audio: { ...studio.project.audio, ambience: { enabled: false, volume: 0 }, sfx: { ...studio.project.audio.sfx, cuts: false } }, voice: studio.project.voice, dialogue: studio.project.dialogue })
+    expect(plan.sampleRate).toBe(48000)
+    const small = { ...plan, sampleRate: 12000 }
+    const silentVoice = new Float32Array(12000 * 1.8)
+    const mix = await renderMixSamples(small, async (hash) => (hash === 'tone' ? { sampleRate: 12000, samples: silentVoice } : undefined))
+    expect(mix.missing).toEqual([])
+    const rms = (from: number, to: number) => {
+      let sum = 0
+      for (let i = Math.round(from * 12000); i < Math.round(to * 12000); i++) sum += mix.samples[i]! ** 2
+      return Math.sqrt(sum / Math.round((to - from) * 12000))
+    }
+    const under = rms(first.start + 0.4, first.start + 1.6)
+    const beside = rms(first.start + 3.2, first.start + 4.4)
+    expect(under).toBeLessThan(beside * 0.8)
+    const last = studio.project.dialogue.at(-1)!
+    expect(rms(last.start, last.start + 0.1)).toBeGreaterThan(rms(last.start - 2.2, last.start - 2.1))
+    const again = await renderMixSamples(small, async () => ({ sampleRate: 12000, samples: silentVoice }))
+    expect(again.samples).toEqual(mix.samples)
+    const missing = await renderMixSamples(small, async () => undefined)
+    expect(missing.missing).toEqual(['voice:d-1'])
+  })
+  it('accepts projects saved before audio existed', () => {
+    const old = JSON.parse(serializeProject(chatbotVsAgent())) as Record<string, unknown>
+    delete old.audio
+    old.voice = { provider: 'none', language: 'en', voices: {} }
+    const project = validateProject(old)
+    expect(project.audio).toEqual(DEFAULT_AUDIO)
+    expect(project.voice.language).toBe('en')
   })
 })

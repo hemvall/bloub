@@ -25,12 +25,12 @@ export const CHARACTERS: Record<CharacterKind, CharacterDef> = {
   lew: {
     kind: 'lew',
     name: 'Lew',
-    color: '#3b6e8f',
+    color: '#6b6f7b',
     expression: 'deadpan',
-    eyeHeight: 1.62,
+    eyeHeight: 1.5,
     tier: 'brand',
     description:
-      'The main character. A steel-blue figure with a soft squared head, one amber fin swept back on top, half-lidded eyes and a small mouth. Calm, clever, slightly sarcastic; explains AI with as few words as possible.',
+      'The main character. A low-poly grey raccoon: black eye mask with half-lidded eyes, tiny pale muzzle, pointed ears, striped tail, elongated body. Calm, clever, slightly sarcastic; explains AI with as few words as possible.',
     personality: {
       summary: 'calm, clever, slightly sarcastic',
       idle: 'relaxed',

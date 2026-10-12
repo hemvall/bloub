@@ -11,16 +11,17 @@ export interface ExportProgress {
 }
 /**
  * Walks the timeline frame by frame through `engine.capture()` and streams each
- * frame into an MP4 (H.264). mediabunny is loaded on demand: it only costs
+ * frame into an MP4 (H.264, plus an AAC track when a mix is given). mediabunny is loaded on demand: it only costs
  * bytes the day someone exports. Awaiting every `add` is what bounds memory.
  */
 export async function renderVideo(
   engine: SceneEngine,
   scene: SceneData,
   onProgress?: (p: ExportProgress) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  audio?: AudioBuffer
 ): Promise<Blob> {
-  const { BufferTarget, CanvasSource, Mp4OutputFormat, Output, Quality } = await import('mediabunny')
+  const { AudioBufferSource, BufferTarget, CanvasSource, Mp4OutputFormat, Output, Quality } = await import('mediabunny')
   const [width, height] = OUTPUT_SIZE[scene.aspect]
   const fps = Math.min(60, Math.max(1, Math.round(scene.fps)))
   const total = Math.max(1, Math.round(scene.duration * fps))
@@ -34,7 +35,11 @@ export async function renderVideo(
     quality: new Quality({ quantizer: 20, bitrate: 14_000_000 })
   })
   output.addVideoTrack(source, { frameRate: fps })
+  // The mix is rendered offline beforehand; it is the same buffer the preview plays.
+  const audioSource = audio ? new AudioBufferSource({ codec: 'aac', bitrate: 160_000 }) : undefined
+  if (audioSource) output.addAudioTrack(audioSource)
   await output.start()
+  if (audioSource && audio) await audioSource.add(audio)
   const capture = engine.capture(width, height)
   try {
     for (let i = 0; i < total; i++) {

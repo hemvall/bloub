@@ -89,7 +89,7 @@ export function compileProject(project: ContentProject): CompileResult {
     const busyUntil = spoken.get(id) ?? -1
     if (line.start < busyUntil - 1e-6) warnings.push(`${line.speaker} overlaps a previous line at ${line.start}s`)
     spoken.set(id, line.start + line.duration)
-    c.say(id, line.text, within(line.start), line.duration)
+    c.say(id, line.text, within(line.start), line.duration, line.audio?.envelope)
     if (line.emotion) c.setExpression(id, line.emotion, within(line.start - EMOTION_LEAD))
   }
   // Liveliness first, explicit cues after: a cue at the same time replaces the automatic key.

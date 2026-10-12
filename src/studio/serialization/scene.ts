@@ -163,6 +163,7 @@ export function validateScene(input: unknown): SceneData {
       if (type === 'dialogue') {
         text(e.text, 'dialogue text', 280)
         number(e.duration, 0.2, 60, 'dialogue duration')
+        if (e.envelope !== undefined) list(e.envelope, 3000, 'envelope').forEach((v) => number(v, 0, 1, 'envelope sample'))
       }
     }
   }

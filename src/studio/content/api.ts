@@ -7,7 +7,7 @@ import { CHARACTERS } from '../characters/catalog'
 import type { ActingCommand } from './acting'
 import { compileProject, type CompileResult } from './compile'
 import { LINE_GAP, parseScript, printScript } from './script'
-import { castMember, createProject, parseProject, serializeProject, type ActingCue, type CastMember, type ContentProject, type CreateOptions, type DialogueLine, type ProjectStatus, type Shot } from './project'
+import { castMember, createProject, parseProject, serializeProject, type ActingCue, type AudioConfig, type CastMember, type ContentProject, type CreateOptions, type DialogueLine, type LineAudio, type ProjectStatus, type Shot, type VoiceConfig } from './project'
 import { findTemplate } from './templates'
 /**
  * The programmatic surface of the studio. The Vue store calls this; an agent
@@ -225,10 +225,67 @@ export class ContentStudio {
     this.project.props = this.project.props.filter((p) => p.id !== id)
     this.touch()
   }
+  // --- Audio ---------------------------------------------------------------------------
+  setAudio(patch: Partial<AudioConfig>) {
+    const a = this.project.audio
+    if (patch.music) a.music = { ...a.music, ...patch.music }
+    if (patch.ambience) a.ambience = { ...a.ambience, ...patch.ambience }
+    if (patch.sfx) a.sfx = { ...a.sfx, ...patch.sfx }
+    if (patch.ducking !== undefined) a.ducking = patch.ducking
+    if (patch.voiceVolume !== undefined) a.voiceVolume = patch.voiceVolume
+    this.touch()
+  }
+  setVoice(patch: Partial<VoiceConfig>) {
+    const v = this.project.voice
+    if (patch.provider !== undefined) v.provider = patch.provider
+    if (patch.language !== undefined) v.language = patch.language
+    if (patch.model !== undefined) v.model = patch.model
+    if (patch.voices) v.voices = { ...v.voices, ...patch.voices }
+    if (patch.instructions) v.instructions = { ...v.instructions, ...patch.instructions }
+    this.touch()
+  }
+  /**
+   * Attaches a generated clip to a line. The line takes the clip's length and
+   * every later beat slides by the difference, so the conversation keeps its gaps.
+   */
+  attachVoice(lineId: string, audio: LineAudio) {
+    const line = this.project.dialogue.find((d) => d.id === lineId)
+    if (!line) throw new Error(`Unknown line: ${lineId}`)
+    const delta = Math.round((audio.duration - line.duration) * 100) / 100
+    line.audio = { hash: audio.hash, duration: audio.duration, envelope: [...audio.envelope] }
+    line.duration = audio.duration
+    if (delta) this.shiftAfter(line.start, delta, line.id)
+    this.touch()
+  }
+  /** Drops the clips (the text changed, or the voice did); durations go back to reading speed. */
+  clearVoice(lineIds?: string[]) {
+    for (const line of this.project.dialogue) {
+      if (lineIds && !lineIds.includes(line.id)) continue
+      if (!line.audio) continue
+      const delta = Math.round((readingTime(line.text) - line.duration) * 100) / 100
+      delete line.audio
+      line.duration = readingTime(line.text)
+      if (delta) this.shiftAfter(line.start, delta, line.id)
+    }
+    this.touch()
+  }
+  private shiftAfter(time: number, delta: number, except: string) {
+    const move = (t: number) => Math.max(0, Math.round((t + delta) * 100) / 100)
+    for (const d of this.project.dialogue) if (d.id !== except && d.start > time + 1e-6) d.start = move(d.start)
+    for (const s of this.project.shots) if (s.start > time + 1e-6) s.start = move(s.start)
+    for (const c of this.project.cues) if (c.time > time + 1e-6) c.time = move(c.time)
+    if (this.project.duration) this.project.duration = Math.max(1, Math.round((this.project.duration + delta) * 10) / 10)
+  }
   // --- Script -----------------------------------------------------------------------
   /** Replaces every beat with what the text says. Returns the parser's warnings. */
   setScript(text: string): string[] {
-    const parsed = parseScript(text, this.project.cast)
+    const parsed = parseScript(text, this.project.cast, this.project.voice.language)
+    // A clip survives a rewrite as long as its line kept the same speaker and text.
+    const previous = this.project.dialogue.filter((d) => d.audio)
+    for (const line of parsed.dialogue) {
+      const match = previous.find((d) => d.speaker === line.speaker && d.text === line.text)
+      if (match?.audio) line.audio = { ...match.audio, envelope: [...match.audio.envelope] }
+    }
     this.project.dialogue = parsed.dialogue
     this.project.shots = parsed.shots
     this.project.cues = parsed.cues
@@ -236,7 +293,11 @@ export class ContentStudio {
     return parsed.warnings
   }
   script() {
-    return printScript(this.project)
+    return printScript(this.project, this.project.voice.language)
+  }
+  /** Re-applies clip lengths to the lines that carry one (after a script edit that kept them). */
+  retime() {
+    for (const line of [...this.project.dialogue].sort((a, b) => a.start - b.start)) if (line.audio) this.attachVoice(line.id, line.audio)
   }
   // --- Output --------------------------------------------------------------------------
   compileTimeline(): CompileResult {

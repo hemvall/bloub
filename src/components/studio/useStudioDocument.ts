@@ -21,9 +21,11 @@ import { download, ExportCancelled, renderStill, renderVideo, slug } from '@/stu
 import { ContentStudio } from '@/studio/content/api'
 import { newProjectId, parseProject, projectFromScene, serializeProject, validateProject, type ContentProject, type ProjectStatus } from '@/studio/content/project'
 import { generateProject } from '@/studio/content/generate'
+import { buildExample, EXAMPLE_REELS } from '@/studio/content/examples'
 import { OUTPUT_PRESETS, renderPlan, type OutputFormat } from '@/studio/render/presets'
 import { loadLibrary, saveLibrary } from './useProject'
 import { useClaudeSettings } from './useDirector'
+import { useAudio } from './useAudio'
 export type TransformMode = 'translate' | 'rotate' | 'scale'
 export type Panel = 'director' | 'inspector'
 export type LeftPanel = 'script' | 'scene'
@@ -85,7 +87,7 @@ export function useStudioDocument() {
   }))
   const selectedCharacter = computed(() => scene.value.characters.find((c) => c.id === selected.value))
   const event = computed(() => scene.value.timeline.find((e) => e.id === selectedEvent.value))
-  const plan = computed(() => renderPlan(project.value.format, scene.value.duration))
+  const plan = computed(() => renderPlan(project.value.format, scene.value.duration, project.value))
   const canGenerate = computed(() => !!claude.value.apiKey)
   function bindViewport(instance: unknown) {
     viewport.value = instance as InstanceType<typeof StudioViewport> | undefined
@@ -130,6 +132,7 @@ export function useStudioDocument() {
       return false
     }
   }
+  const audio = useAudio(project, editProject, message)
   // --- Content ------------------------------------------------------------------
   function compile() {
     let warnings: string[] = []
@@ -184,14 +187,21 @@ export function useStudioDocument() {
   // --- Transport --------------------------------------------------------------
   function seek(value: number) {
     viewport.value?.pause()
+    audio.stop()
     playing.value = false
     time.value = Math.max(0, Math.min(scene.value.duration, value))
     viewport.value?.seek(time.value)
     camera.value = cameraAt(scene.value, time.value)
   }
   function togglePlay() {
-    if (playing.value) viewport.value?.pause()
-    else viewport.value?.play()
+    if (playing.value) {
+      viewport.value?.pause()
+      audio.stop()
+    } else {
+      const from = time.value >= scene.value.duration - 1e-3 ? 0 : time.value
+      viewport.value?.play()
+      audio.play(from)
+    }
     playing.value = !playing.value
   }
   function step(frames: number) {
@@ -348,6 +358,7 @@ export function useStudioDocument() {
     const next = projects.value.find((p) => p.id === id)
     if (!next) return
     viewport.value?.pause()
+    audio.stop()
     playing.value = false
     activeId.value = id
     project.value = next
@@ -383,6 +394,7 @@ export function useStudioDocument() {
   }
   function toLibrary() {
     viewport.value?.pause()
+    audio.stop()
     playing.value = false
     captureThumbnail()
     view.value = 'library'
@@ -399,6 +411,14 @@ export function useStudioDocument() {
     } catch (e) {
       message.value = e instanceof Error ? e.message : String(e)
     }
+  }
+  /** A fresh copy of one of the ready-made reels, with its own id. */
+  function newFromExample(id: string) {
+    const reel = EXAMPLE_REELS.find((r) => r.id === id)
+    if (!reel) return
+    const project = buildExample(reel, new Date().toISOString())
+    project.id = newProjectId()
+    addProject(project)
   }
   function duplicateProject(id = activeId.value) {
     const source = projects.value.find((p) => p.id === id)
@@ -476,12 +496,16 @@ export function useStudioDocument() {
     if (!engine || exporting.value.running) return
     if (format !== project.value.format) setFormat(format)
     viewport.value?.pause()
+    audio.stop()
     playing.value = false
     exportAbort = new AbortController()
     const preset = OUTPUT_PRESETS[format]
-    exporting.value = { running: true, done: 0, total: Math.round(scene.value.duration * scene.value.fps), label: `${preset.name} · ${preset.width}×${preset.height} · ${scene.value.fps} fps · silent` }
+    exporting.value = { running: true, done: 0, total: Math.round(scene.value.duration * scene.value.fps), label: `${preset.name} · ${preset.width}×${preset.height} · ${scene.value.fps} fps · mixing audio` }
     try {
-      const blob = await renderVideo(engine, scene.value, (p) => (exporting.value = { ...exporting.value, ...p }), exportAbort.signal)
+      const mix = audio.hasSound.value ? await audio.currentMix() : undefined
+      if (audio.missing.value.length) message.value = `Missing clips left out of the mix: ${audio.missing.value.join(', ')}`
+      exporting.value = { ...exporting.value, label: `${preset.name} · ${preset.width}×${preset.height} · ${scene.value.fps} fps · ${mix ? 'AAC audio' : 'silent'}` }
+      const blob = await renderVideo(engine, scene.value, (p) => (exporting.value = { ...exporting.value, ...p }), exportAbort.signal, mix)
       download(blob, `${slug(project.value.title)}-${format}.mp4`)
       editProject((s) => s.setStatus('rendered'), `MP4 saved · ${(blob.size / 1e6).toFixed(1)} MB`)
     } catch (e) {
@@ -560,6 +584,7 @@ export function useStudioDocument() {
     plan,
     canGenerate,
     claude,
+    audio,
     adopt,
     adoptProject,
     edit,
@@ -596,6 +621,7 @@ export function useStudioDocument() {
     toLibrary,
     captureThumbnail,
     newProject,
+    newFromExample,
     duplicateProject,
     deleteProject,
     load,

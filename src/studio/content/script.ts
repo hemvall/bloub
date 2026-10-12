@@ -1,15 +1,18 @@
-import { EXPRESSIONS, type Expression } from '../scene/model'
+import type { Expression } from '../scene/model'
 import { isShotMovement, isShotType, SHOT_TYPES, type ShotMovement, type ShotType } from '../camera/shots'
 import { readingTime } from '../timeline/evaluate'
-import { ACTING, ACTING_WORDS, type ActingCommand } from './acting'
+import { ACTING, ACTING_WORDS, EMOTION_LABELS, EMOTION_WORDS, normalize, type ActingCommand } from './acting'
 import type { ActingCue, CastMember, DialogueLine, Shot } from './project'
+import type { ContentLanguage } from '../audio/plan'
 /**
- * The script format: what a person writes and what a model generates.
+ * The script format: what a person writes and what a model generates. French
+ * and English are read alike; the printer writes stage directions in the
+ * project's language and keeps the format's keywords (CAMERA, PAUSE, shot names).
  *
  *   [00:03.2]                 cursor time (optional: lines flow one after the other)
  *   CAMERA: close-up Lew slow-push
- *   Lew looks at CEO.         stage directions in plain sentences
- *   LEW (deadpan): "Then you have a chatbot."
+ *   Lew regarde le CEO.       stage directions in plain sentences
+ *   LEW (impassible): "Alors vous avez un chatbot."
  *   PAUSE 0.4
  *
  * `parseScript` is deterministic and `printScript` writes exactly what parses
@@ -23,39 +26,54 @@ export interface ParsedScript {
 }
 export const LINE_GAP = 0.3
 const round = (t: number) => Math.round(t * 100) / 100
-const TIME = /^\[\s*(?:(\d+):)?(\d+(?:\.\d+)?)\s*s?\s*\]$/
-const CAMERA = /^camera\s*:\s*(.+)$/i
-const PAUSE = /^pause(?:\s+(\d+(?:\.\d+)?)\s*s?)?\.?$/i
-const HEAD = /^([A-Za-z][\w .'-]{0,39}?)\s*(?:\(([^)]*)\))?\s*:\s*(.*)$/
-/** Spoken forms into canonical tokens; each rule is idempotent on its own output. */
+const TIME = /^\[\s*(?:(\d+):)?(\d+(?:[.,]\d+)?)\s*s?\s*\]$/
+const CAMERA = /^cam[ée]ra\s*:\s*(.+)$/i
+const PAUSE = /^pause(?:\s+(\d+(?:[.,]\d+)?)\s*s?)?\.?$/i
+const HEAD = /^([\p{L}][\p{L}\d .'-]{0,39}?)\s*(?:\(([^)]*)\))?\s*:\s*(.*)$/u
+/** Spoken forms, in both languages, into canonical tokens; each rule is idempotent on its own output. */
 const SYNONYMS: [RegExp, string][] = [
-  [/\bclose[- ]?up\b|\bcu\b/g, 'close-up'],
-  [/\bover[- ]the[- ]shoulder\b|\bots\b/g, 'over-shoulder'],
-  [/\btwo[- ]shot\b/g, 'two-shot'],
-  [/\bpush(?:es)?[- ]in\b|\bzooms? in\b/g, 'push-in'],
-  [/\bpulls?[- ](?:out|back)\b|\bzooms? out\b/g, 'pull-out'],
-  [/\bslow(?:ly)?[- ]push(?:es)?\b|(?<![\w-])push(?:es)?\b(?![- ]in)/g, 'slow-push'],
-  [/\bslow(?:ly)?[- ]pans?\b|(?<![\w-])pans?\b/g, 'slow-pan'],
-  [/\bstatic\b|\bstill\b|\bhold\b/g, 'static']
+  [/\bclose[- ]?up\b|\bcu\b|\bgros plan\b|\btres gros plan\b/g, 'close-up'],
+  [/\bover[- ]the[- ]shoulder\b|\bots\b|\bpar[- ]dessus l'epaule\b|\bepaule\b/g, 'over-shoulder'],
+  [/\btwo[- ]shot\b|\bplan (a|a) deux\b|\bplan deux\b|\bles deux\b/g, 'two-shot'],
+  [/\bplan (moyen|rapproche|americain|taille)\b|\bmoyen\b/g, 'medium'],
+  [/\bplan (large|d'ensemble|general)\b|\blarge\b/g, 'wide'],
+  [/\b(de )?profil\b/g, 'profile'],
+  [/\bpush(?:es)?[- ]in\b|\bzooms? in\b|\bzoom avant\b|\bavance vite\b/g, 'push-in'],
+  [/\bpulls?[- ](?:out|back)\b|\bzooms? out\b|\bzoom arriere\b|\brecule\b|\bs'eloigne\b/g, 'pull-out'],
+  [/\bslow(?:ly)?[- ]push(?:es)?\b|(?<![\w-])push(?:es)?\b(?![- ]in)|\btravelling avant( lent)?\b|\bavance lentement\b|\bse rapproche( lentement)?\b|\bzoom lent\b/g, 'slow-push'],
+  [/\bslow(?:ly)?[- ]pans?\b|(?<![\w-])pans?\b|\bpanoramique( lent)?\b|\bglisse\b/g, 'slow-pan'],
+  [/\bstatic\b|\bstill\b|\bhold\b|\bfixe\b/g, 'static']
 ]
+const STOP = new Set(['on', 'of', 'the', 'and', 'to', 'camera', 'with', 'sur', 'de', 'du', 'le', 'la', 'les', 'et', 'un', 'une', 'avec', 'plan', 'en'])
 function strip(text: string) {
-  return text.trim().replace(/^["“”']+/, '').replace(/["“”']+$/, '').trim()
+  return text.trim().replace(/^[«"“”']+\s*/, '').replace(/\s*[»"“”']+$/, '').trim()
 }
 function findRole(cast: CastMember[], word: string) {
-  const w = word.trim().toLowerCase()
-  return cast.find((c) => c.role.toLowerCase() === w || c.name.toLowerCase() === w)?.role
+  const w = normalize(word.trim())
+  return cast.find((c) => normalize(c.role) === w || normalize(c.name) === w)?.role
+}
+function escape(text: string) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 function rolesIn(cast: CastMember[], sentence: string): string[] {
-  const lower = sentence.toLowerCase()
+  const lower = normalize(sentence)
   const found: { role: string; index: number }[] = []
   for (const c of cast)
     for (const key of [c.role, c.name]) {
-      const m = new RegExp(`\\b${key.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).exec(lower)
+      const m = new RegExp(`(?<![\\p{L}\\d])${escape(normalize(key))}(?![\\p{L}\\d])`, 'u').exec(lower)
       if (m && !found.some((f) => f.role === c.role)) found.push({ role: c.role, index: m.index })
     }
   return found.sort((a, b) => a.index - b.index).map((f) => f.role)
 }
-export function parseScript(text: string, cast: CastMember[]): ParsedScript {
+function emotionOf(token: string): Expression | undefined {
+  const t = normalize(token)
+  if (t in EMOTION_WORDS) return EMOTION_WORDS[t]
+  const base = t.replace(/e?s$/, '')
+  if (base in EMOTION_WORDS) return EMOTION_WORDS[base]
+  if (t in ACTING && ACTING[t as ActingCommand].expression) return ACTING[t as ActingCommand].expression
+  return undefined
+}
+export function parseScript(text: string, cast: CastMember[], _language: ContentLanguage = 'fr'): ParsedScript {
   const out: ParsedScript = { dialogue: [], shots: [], cues: [], warnings: [] }
   let cursor = 0,
     last: string | undefined,
@@ -86,20 +104,20 @@ export function parseScript(text: string, cast: CastMember[]): ParsedScript {
       flush()
       continue
     }
-    if (/^end\b/i.test(line)) {
+    if (/^(end|fin)\b/i.test(line)) {
       flush()
       break
     }
     const time = TIME.exec(line)
     if (time) {
       flush()
-      cursor = round(Number(time[1] ?? 0) * 60 + Number(time[2]))
+      cursor = round(Number(time[1] ?? 0) * 60 + Number(time[2]!.replace(',', '.')))
       continue
     }
     const pause = PAUSE.exec(line)
     if (pause) {
       flush()
-      cursor = round(cursor + Number(pause[1] ?? 0.4))
+      cursor = round(cursor + Number((pause[1] ?? '0.4').replace(',', '.')))
       continue
     }
     const cam = CAMERA.exec(line)
@@ -116,10 +134,10 @@ export function parseScript(text: string, cast: CastMember[]): ParsedScript {
       flush()
       pending = { speaker, text: [] }
       for (const token of (head[2] ?? '').split(',').map((t) => t.trim().toLowerCase()).filter(Boolean)) {
-        const seconds = /^(\d+(?:\.\d+)?)\s*s$/.exec(token)
-        if (seconds) pending.duration = Number(seconds[1])
-        else if ((EXPRESSIONS as string[]).includes(token)) pending.emotion = token as Expression
-        else if (token in ACTING && ACTING[token as ActingCommand].expression) pending.emotion = ACTING[token as ActingCommand].expression
+        const seconds = /^(\d+(?:[.,]\d+)?)\s*s$/.exec(token)
+        const emotion = emotionOf(token)
+        if (seconds) pending.duration = Number(seconds[1]!.replace(',', '.'))
+        else if (emotion) pending.emotion = emotion
         else out.warnings.push(`Unknown emotion "${token}" on ${speaker}'s line`)
       }
       if (head[3]) {
@@ -144,10 +162,15 @@ export function parseScript(text: string, cast: CastMember[]): ParsedScript {
   flush()
   return out
 }
+function canonical(spec: string) {
+  let s = normalize(spec).replace(/[.,]/g, ' ')
+  for (const [re, token] of SYNONYMS) s = s.replace(re, token)
+  return s
+}
 function parseShot(spec: string, cast: CastMember[], last?: string): Omit<Shot, 'id' | 'start'> | null {
-  let s = spec.toLowerCase().replace(/[.,]/g, ' ')
-  for (const [re, canonical] of SYNONYMS) s = s.replace(re, canonical)
-  const tokens = s.split(/\s+/).filter((t) => t && !['on', 'of', 'the', 'and', 'to', 'camera', 'with'].includes(t))
+  const tokens = canonical(spec)
+    .split(/\s+/)
+    .filter((t) => t && !STOP.has(t))
   const type = tokens.find(isShotType)
   if (!type) return null
   const movement = (tokens.find(isShotMovement) ?? 'static') as ShotMovement
@@ -165,28 +188,31 @@ interface Direction {
   shot?: Omit<Shot, 'id' | 'start'>
   cues: Omit<ActingCue, 'id' | 'time'>[]
 }
+const CAMERA_WORD = /\bcamera\b/
+const LOOK_AT = /\b(?:looks?|glances?|stares?|turns?) (?:at|to|toward|towards)\b|\bregarde(?:nt)?\b|\bfixe(?:nt)?\b|\bse tourne(?:nt)? vers\b|\bobserve(?:nt)?\b/
+const LOOK_TARGET = /\b(?:at|to|toward|towards|regarde(?:nt)?|fixe(?:nt)?|vers|observe(?:nt)?)\s+(?:the\s+|le\s+|la\s+|les\s+|l'|du\s+|de\s+la\s+|des\s+)?([a-z][a-z\d-]*)/
+const CAMERA_WORDS = new Set(['camera', 'viewer', 'audience', 'us', 'lens', 'spectateur', 'public', 'objectif', 'nous'])
 function parseDirection(sentence: string, cast: CastMember[], last?: string): Direction {
-  const lower = sentence.toLowerCase()
+  const lower = normalize(sentence)
   const roles = rolesIn(cast, sentence)
   const result: Direction = { cues: [] }
-  // "Camera slowly pushes toward Lew." keeps the current framing and adds a movement.
-  if (/\bcamera\b/.test(lower) && !/\b(looks?|glances?|stares?) (at|to|toward)\b/.test(lower)) {
-    let s = lower
-    for (const [re, canonical] of SYNONYMS) s = s.replace(re, canonical)
-    const movement = s.split(/\s+/).find(isShotMovement)
-    const type = (s.split(/\s+/).find(isShotType) ?? 'medium') as ShotType
+  // "Camera slowly pushes toward Lew." / "La caméra se rapproche de Lew." keeps the framing and adds a movement.
+  if (CAMERA_WORD.test(lower) && !LOOK_AT.test(lower.replace(CAMERA_WORD, ''))) {
+    const tokens = canonical(lower).split(/\s+/)
+    const movement = tokens.find(isShotMovement)
+    const type = (tokens.find(isShotType) ?? 'medium') as ShotType
     const target = roles[0] ?? last ?? cast[0]?.role
     if (movement && target) result.shot = { type, target, movement }
     return result
   }
-  const actor = roles[0] ?? (/\b(he|she|it|they|him|her)\b/.test(lower) ? last : undefined) ?? last ?? cast[0]?.role
+  const actor = roles[0] ?? (/\b(he|she|it|they|him|her|il|elle|ils|elles)\b/.test(lower) ? last : undefined) ?? last ?? cast[0]?.role
   if (!actor) return result
   for (const [re, command] of ACTING_WORDS) {
     if (!re.test(lower)) continue
     if (command === 'lookAt') {
-      const m = /\b(?:at|to|toward|towards)\s+(?:the\s+)?([a-z][\w-]*)/.exec(lower)
+      const m = LOOK_TARGET.exec(lower)
       const word = m?.[1] ?? ''
-      const target = ['camera', 'viewer', 'audience', 'us', 'lens'].includes(word) ? 'camera' : (findRole(cast, word) ?? word)
+      const target = CAMERA_WORDS.has(word) ? 'camera' : (findRole(cast, word) ?? word)
       if (target) result.cues.push({ actor, command, target })
     } else result.cues.push({ actor, command })
   }
@@ -201,9 +227,13 @@ export function formatTime(t: number) {
 function label(cast: CastMember[], role: string) {
   return cast.find((c) => c.role === role)?.name ?? role
 }
-export function printScript(project: { cast: CastMember[]; dialogue: DialogueLine[]; shots: Shot[]; cues: ActingCue[] }): string {
+export function printScript(
+  project: { cast: CastMember[]; dialogue: DialogueLine[]; shots: Shot[]; cues: ActingCue[] },
+  language: ContentLanguage = 'fr'
+): string {
   type Item = { time: number; order: number; text: string }
   const items: Item[] = []
+  const cameraWord = language === 'fr' ? 'la caméra' : 'the camera'
   for (const s of project.shots)
     items.push({
       time: s.start,
@@ -211,11 +241,11 @@ export function printScript(project: { cast: CastMember[]; dialogue: DialogueLin
       text: `CAMERA: ${s.type} ${label(project.cast, s.target)}${s.other ? ` ${label(project.cast, s.other)}` : ''}${s.movement !== 'static' ? ` ${s.movement}` : ''}`
     })
   for (const c of project.cues) {
-    const prose = ACTING[c.command].prose.replace('%t', c.target === 'camera' ? 'the camera' : c.target ? label(project.cast, c.target) : 'the camera')
+    const prose = ACTING[c.command].prose[language].replace('%t', c.target === 'camera' || !c.target ? cameraWord : label(project.cast, c.target))
     items.push({ time: c.time, order: 1, text: `${label(project.cast, c.actor)} ${prose}` })
   }
   for (const d of project.dialogue) {
-    const notes = [d.emotion, d.duration !== readingTime(d.text) ? `${d.duration}s` : undefined].filter(Boolean).join(', ')
+    const notes = [d.emotion && EMOTION_LABELS[d.emotion][language], d.audio || d.duration !== readingTime(d.text) ? `${d.duration}s` : undefined].filter(Boolean).join(', ')
     items.push({ time: d.start, order: 2, text: `${label(project.cast, d.speaker).toUpperCase()}${notes ? ` (${notes})` : ''}: "${d.text}"` })
   }
   items.sort((a, b) => a.time - b.time || a.order - b.order)
@@ -230,8 +260,9 @@ export function printScript(project: { cast: CastMember[]; dialogue: DialogueLin
   }
   return blocks.join('\n').trim() + '\n'
 }
-export const SCRIPT_HELP = `[00:00.0]            time (mm:ss.s); without it lines follow each other
-CAMERA: ${SHOT_TYPES.join(' | ')} <who> [slow-push | push-in | pull-out | slow-pan]
-LEW (deadpan): "A line."   emotion and/or a duration like (2.4s) in parentheses
-Lew looks at CEO.    stage directions as plain sentences: nods, sighs, looks away, looks confused…
+export const SCRIPT_HELP = `[00:00.0]            temps (mm:ss.s) ; sans lui les répliques s'enchaînent
+CAMERA: ${SHOT_TYPES.join(' | ')} <qui> [slow-push | push-in | pull-out | slow-pan]
+   (ou en français : gros plan, plan moyen, plan large, profil, plan à deux, épaule, zoom lent…)
+LEW (impassible): "Une réplique."   émotion et/ou durée (2.4s) entre parenthèses
+Lew regarde le CEO.  directions en phrases : hoche la tête, soupire, détourne le regard, a l'air perdu…
 PAUSE 0.4`
